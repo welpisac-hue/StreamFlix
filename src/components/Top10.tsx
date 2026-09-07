@@ -52,6 +52,7 @@ export default function Top10({ movies, title = 'Top 10 Today' }: Top10Props) {
                     src={posterFor(item)}
                     alt={label}
                     loading="lazy"
+                    referrerPolicy="no-referrer"
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
                 </div>

@@ -198,6 +198,7 @@ export default function LiveSearch({
                       <img
                         src={posterUrl(item.posterPath)}
                         alt=""
+                        referrerPolicy="no-referrer"
                         className="h-12 w-8 rounded object-cover"
                       />
                       <div className="min-w-0 flex-1">

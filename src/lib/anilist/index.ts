@@ -74,6 +74,7 @@ async function anilistQuery<T>(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'User-Agent': 'StreamFlix/1.0 (anime catalog; contact via site)',
       },
       body: JSON.stringify({ query, variables }),
       next: { revalidate: 300 },
@@ -91,7 +92,10 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`${JIKAN_URL}${path}`, {
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'StreamFlix/1.0 (anime catalog; contact via site)',
+        },
         next: { revalidate: 300 },
       })
       if (res.status === 429 || res.status >= 500) {

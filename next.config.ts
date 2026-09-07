@@ -23,9 +23,9 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://image.tmdb.org https://*.tmdb.org https://s4.anilist.co https://*.anilist.co https://rickandmortyapi.com https://static.wikia.nocookie.net",
+      "img-src 'self' data: blob: https://image.tmdb.org https://*.tmdb.org https://s4.anilist.co https://*.anilist.co https://cdn.myanimelist.net https://*.myanimelist.net https://rickandmortyapi.com https://static.wikia.nocookie.net",
       "font-src 'self' data:",
-      "connect-src 'self' https://api.themoviedb.org https://graphql.anilist.co https://rickandmortyapi.com https://api.disneyapi.dev",
+      "connect-src 'self' https://api.themoviedb.org https://graphql.anilist.co https://api.jikan.moe https://arm.haglund.dev https://rickandmortyapi.com https://api.disneyapi.dev",
       "frame-src 'self' https://www.vidking.net https://vidking.net https://tryembed.us.cc https://www.youtube.com https://www.youtube-nocookie.com",
       "media-src 'self' blob: https:",
       "object-src 'none'",
@@ -76,6 +76,11 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 's4.anilist.co',
         pathname: '/file/anilistcdn/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.myanimelist.net',
+        pathname: '/images/**',
       },
       {
         protocol: 'https',

@@ -58,6 +58,7 @@ export default function LocalizedAnimeHome({
             <img
               src={featured.bannerImage || featured.coverImage || ''}
               alt=""
+              referrerPolicy="no-referrer"
               className="h-full w-full scale-105 object-cover opacity-55"
             />
           ) : null}

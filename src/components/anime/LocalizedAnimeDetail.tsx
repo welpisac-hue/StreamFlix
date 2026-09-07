@@ -37,6 +37,7 @@ export default function LocalizedAnimeDetail({ anime }: { anime: AnimeDetails })
           <img
             src={anime.bannerImage || anime.coverImage || '/placeholder.svg'}
             alt=""
+            referrerPolicy="no-referrer"
             className="h-full w-full object-cover opacity-70"
           />
           <div className="anime-hero-scrim absolute inset-0" />
@@ -48,6 +49,7 @@ export default function LocalizedAnimeDetail({ anime }: { anime: AnimeDetails })
               <img
                 src={anime.coverImage}
                 alt={title}
+                referrerPolicy="no-referrer"
                 className="hidden w-44 shrink-0 rounded-xl shadow-2xl ring-1 ring-fuchsia-300/20 md:block lg:w-52"
               />
             )}

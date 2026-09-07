@@ -166,6 +166,7 @@ export default function AnimeContinueWatchingPage() {
                     <img
                       src={imageUrl}
                       alt={item.title}
+                      referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition group-hover:opacity-100">
@@ -242,6 +243,7 @@ export default function AnimeContinueWatchingPage() {
                     <img
                       src={resolvePoster(item.posterPath)}
                       alt={item.title}
+                      referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute right-2 top-2 rounded bg-emerald-600 px-2 py-1 text-xs text-white">
