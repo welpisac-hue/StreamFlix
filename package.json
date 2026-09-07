@@ -6,14 +6,15 @@
     "build": "prisma generate && next build",
     "dev": "next dev",
     "build:secure": "prisma generate && cross-env ENABLE_JS_OBFUSCATION=1 next build --webpack",
+    "build:worker": "prisma generate && opennextjs-cloudflare build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:reset": "node prisma/wipe.js && prisma db push && npx tsx prisma/seed.ts",
     "db:seed": "npx tsx prisma/seed.ts",
-    "preview": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "preview": "npm run build:worker && opennextjs-cloudflare preview",
+    "deploy": "npm run build:worker && opennextjs-cloudflare deploy",
+    "upload": "npm run build:worker && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "prisma": {
