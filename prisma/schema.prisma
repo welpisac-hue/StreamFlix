@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum InviteKind {
+  ADMIN
+  FRIEND
+}
+
+model User {
+  id             String    @id @default(cuid())
+  username       String    @unique
+  name           String?
+  password       String
+  role           Role      @default(USER)
+  image          String?
+  bannedAt       DateTime?
+  banReason      String?
+  lastLoginAt    DateTime?
+  lastLogoutAt   DateTime?
+  adminMessage   String?
+  adminMessageAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  accounts                Account[]
+  sessions                Session[]
+  watchHistory            WatchHistory[]
+  watchLater              WatchLater[]
+  reviews                 Review[]
+  preferences             UserPreferences?
+  inviteRedemption        InviteRedemption?
+  createdInvites          InviteCode[]
+  pageViews               PageView[]
+  pollVotes               PollVote[]
+  dismissedPolls          DismissedPoll[]
+  dismissedAnnouncements  DismissedAnnouncement[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model UserPreferences {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  favoriteGenres      String[]
+  preferredMoods      String[]
+  watchHistory        String[]
+  onboardingCompleted Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WatchHistory {
+  id            String   @id @default(cuid())
+  userId        String
+  tmdbId        Int
+  title         String
+  posterPath    String?
+  mediaType     String
+  seasonNumber  Int?
+  episodeNumber Int?
+  timestamp     Int      @default(0)
+  duration      Int      @default(0)
+  completed     Boolean  @default(false)
+  lastWatched   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tmdbId])
+}
+
+model WatchLater {
+  id         String   @id @default(cuid())
+  userId     String
+  tmdbId     Int
+  title      String
+  posterPath String?
+  mediaType  String
+  addedAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tmdbId, mediaType])
+  @@index([userId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  tmdbId    Int
+  title     String
+  rating    Int
+  comment   String
+  likes     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tmdbId])
+  @@index([tmdbId])
+  @@index([rating])
+}
+
+model InviteCode {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  kind        InviteKind @default(ADMIN)
+  createdById String?
+  maxUses     Int        @default(1)
+  usedCount   Int        @default(0)
+  isActive    Boolean    @default(true)
+  grantsAdmin Boolean    @default(false)
+  note        String?
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  redemptions InviteRedemption[]
+
+  @@index([isActive])
+  @@index([kind])
+  @@index([createdById, kind])
+}
+
+model InviteRedemption {
+  id           String   @id @default(cuid())
+  inviteCodeId String
+  userId       String   @unique
+  redeemedAt   DateTime @default(now())
+
+  inviteCode InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([inviteCodeId])
+}
+
+model PageView {
+  id        String   @id @default(cuid())
+  path      String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([path])
+}
+
+model SiteSettings {
+  id                   String   @id @default("default")
+  maintenanceMode      Boolean  @default(false)
+  maintenanceMessage   String?
+  sectionMaintenance   Json     @default("{}")
+  announcementActive   Boolean  @default(false)
+  announcementTitle    String?
+  announcementBody     String?
+  announcementUpdatedAt DateTime?
+  updatedAt            DateTime @updatedAt
+}
+
+model Poll {
+  id              String    @id @default(cuid())
+  question        String
+  options         String[]
+  isActive        Boolean   @default(true)
+  endsAt          DateTime?
+  resultsRevealAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  votes       PollVote[]
+  dismissals  DismissedPoll[]
+}
+
+model PollVote {
+  id          String   @id @default(cuid())
+  pollId      String
+  userId      String
+  optionIndex Int
+  createdAt   DateTime @default(now())
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([pollId])
+}
+
+model DismissedPoll {
+  id     String @id @default(cuid())
+  pollId String
+  userId String
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+}
+
+model DismissedAnnouncement {
+  id              String @id @default(cuid())
+  userId          String
+  announcementKey String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementKey])
+}

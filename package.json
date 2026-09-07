@@ -1,0 +1,50 @@
+{
+  "name": "movie-streaming-site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "build:secure": "prisma generate && cross-env ENABLE_JS_OBFUSCATION=1 next build --webpack",
+    "start": "next start",
+    "lint": "eslint",
+    "postinstall": "prisma generate",
+    "db:reset": "node prisma/wipe.js && prisma db push && npx tsx prisma/seed.ts",
+    "db:seed": "npx tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "axios": "^1.20.0",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.41.0",
+    "next": "16.3.4",
+    "next-auth": "^4.24.15",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hot-toast": "^2.6.0",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "javascript-obfuscator": "^5.6.0",
+    "prisma": "^6.19.0",
+    "tailwindcss": "^4",
+    "terser-webpack-plugin": "^5.6.1",
+    "typescript": "^5",
+    "webpack-obfuscator": "^3.6.1"
+  }
+}

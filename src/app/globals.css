@@ -1,0 +1,294 @@
+@import "tailwindcss";
+
+:root {
+  --background: #050506;
+  --foreground: #f4f4f5;
+  --primary: #e50914;
+  --primary-dark: #b20710;
+  --surface: #0e0e10;
+  --surface-elevated: #16161a;
+  --border: rgba(255, 255, 255, 0.08);
+  --text-muted: #a1a1aa;
+  --nav-height: 4.25rem;
+  --page-x: clamp(1rem, 4vw, 4rem);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-surface: var(--surface);
+  --color-muted: var(--text-muted);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+  overflow-x: hidden;
+  min-height: 100%;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111113;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.page-shell {
+  padding-left: var(--page-x);
+  padding-right: var(--page-x);
+}
+
+.hero-scrim {
+  background:
+    linear-gradient(90deg, rgba(5, 5, 6, 0.95) 0%, rgba(5, 5, 6, 0.55) 42%, rgba(5, 5, 6, 0.12) 100%),
+    linear-gradient(0deg, rgba(5, 5, 6, 1) 0%, rgba(5, 5, 6, 0.28) 42%, rgba(5, 5, 6, 0.62) 100%);
+}
+
+.page-glow {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(229, 9, 20, 0.16), transparent 55%);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.55s ease-out both;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #151517 25%, #222226 50%, #151517 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* —— Anime mode theme —— */
+.anime-theme {
+  --background: #05020a;
+  --foreground: #f5f3ff;
+  --primary: #e879f9;
+  --primary-dark: #c026d3;
+  --surface: #12081c;
+  --surface-elevated: #1a0f28;
+  --border: rgba(232, 121, 249, 0.16);
+  --text-muted: #c4b5fd;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.anime-bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(180deg, rgba(5, 2, 10, 0.35), rgba(5, 2, 10, 0.82)),
+    url('/anime-theme-bg.png');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  transform: scale(1.02);
+  animation: anime-bg-drift 28s ease-in-out infinite alternate;
+}
+
+.anime-bg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 45% at 15% 10%, rgba(232, 121, 249, 0.22), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 85% 20%, rgba(34, 211, 238, 0.16), transparent 50%),
+    linear-gradient(180deg, rgba(5, 2, 10, 0.2) 0%, rgba(5, 2, 10, 0.75) 70%, #05020a 100%);
+}
+
+.anime-scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.04;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.35) 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+.anime-hero-scrim {
+  background:
+    linear-gradient(90deg, rgba(5, 2, 10, 0.94) 0%, rgba(5, 2, 10, 0.55) 45%, rgba(5, 2, 10, 0.15) 100%),
+    linear-gradient(0deg, rgba(5, 2, 10, 1) 0%, rgba(5, 2, 10, 0.35) 45%, rgba(5, 2, 10, 0.55) 100%);
+}
+
+.anime-cta-primary {
+  background: linear-gradient(135deg, #f0abfc, #22d3ee);
+  color: #0a0214;
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.28);
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.anime-cta-primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.anime-fade-rise {
+  animation: anime-fade-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes anime-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes anime-bg-drift {
+  from {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.06) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+.anime-float-orbs::before,
+.anime-float-orbs::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(40px);
+  animation: anime-orb 10s ease-in-out infinite alternate;
+}
+
+.anime-float-orbs::before {
+  width: 18rem;
+  height: 18rem;
+  left: 8%;
+  top: 22%;
+  background: rgba(232, 121, 249, 0.18);
+}
+
+.anime-float-orbs::after {
+  width: 14rem;
+  height: 14rem;
+  right: 12%;
+  top: 35%;
+  background: rgba(34, 211, 238, 0.14);
+  animation-delay: -4s;
+}
+
+@keyframes anime-orb {
+  from {
+    transform: translateY(0) scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: translateY(-24px) scale(1.12);
+    opacity: 0.9;
+  }
+}
+
+.anime-petal-field {
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(244, 114, 182, 0.55) 0 2px, transparent 3px),
+    radial-gradient(circle at 70% 30%, rgba(251, 207, 232, 0.5) 0 2px, transparent 3px),
+    radial-gradient(circle at 40% 70%, rgba(244, 114, 182, 0.45) 0 1.5px, transparent 3px),
+    radial-gradient(circle at 85% 60%, rgba(255, 255, 255, 0.35) 0 1.5px, transparent 3px),
+    radial-gradient(circle at 10% 80%, rgba(251, 207, 232, 0.4) 0 2px, transparent 3px);
+  background-size: 100% 100%;
+  animation: anime-petals 1.1s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes anime-petals {
+  from {
+    transform: translateY(-8%) rotate(0deg);
+  }
+  to {
+    transform: translateY(12%) rotate(8deg);
+  }
+}
+
+.anime-theme .page-glow {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(232, 121, 249, 0.2), transparent 55%);
+}
