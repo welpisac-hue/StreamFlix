@@ -1,7 +1,8 @@
 /**
  * Optional obscured admin URL.
  * Set NEXT_PUBLIC_ADMIN_PATH (and ADMIN_PATH to the same value) in .env
- * e.g. ops-console-7f3a — then /admin returns 404 and only /{slug} works.
+ * e.g. ops-console-7f3a — client links use /{slug}; next.config rewrites to /admin.
+ * On Cloudflare, middleware must still allow /admin for admins (rewrite destination).
  */
 export function getAdminPath(): string {
   const raw = (

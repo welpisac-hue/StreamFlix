@@ -39,13 +39,13 @@ export default withAuth(
       return applySecurityHeaders(NextResponse.redirect(signIn))
     }
 
-    // When ADMIN_PATH is set, hide the default /admin URL entirely
-    if (adminSlug && (pathname === '/admin' || pathname.startsWith('/admin/'))) {
-      return applySecurityHeaders(new NextResponse(null, { status: 404 }))
-    }
-
+    // Admin UI is at /admin. Optional ADMIN_PATH slug is rewritten there in
+    // next.config — on OpenNext/Cloudflare the request pathname often becomes
+    // /admin after that rewrite, so we must NOT 404 /admin or the dashboard
+    // is unreachable. Non-admins are redirected home (no reveal).
     const isAdminPage =
-      pathname.startsWith('/admin') ||
+      pathname === '/admin' ||
+      pathname.startsWith('/admin/') ||
       (adminSlug !== null &&
         (pathname === `/${adminSlug}` || pathname.startsWith(`/${adminSlug}/`)))
 
@@ -58,7 +58,6 @@ export default withAuth(
             NextResponse.json({ error: 'Forbidden' }, { status: 403 })
           )
         }
-        // Don't reveal that an admin surface exists
         return applySecurityHeaders(
           NextResponse.redirect(new URL('/', req.url))
         )
