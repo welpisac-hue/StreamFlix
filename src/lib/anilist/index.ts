@@ -393,11 +393,18 @@ async function detailsFromJikanByMal(
     (await jikanGet<{ data: any }>(`/anime/${malId}`))
   if (!full?.data) return null
 
-  // Resolve AniList id for TryEmbed without blocking the page on failure
+  // Resolve AniList id for TryEmbed — never block the page on ARM
   let resolvedAnilist =
     preferredAnilistId && preferredAnilistId > 0 ? preferredAnilistId : null
   if (!resolvedAnilist) {
-    resolvedAnilist = await malToAnilist(malId)
+    try {
+      resolvedAnilist = await Promise.race([
+        malToAnilist(malId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+      ])
+    } catch {
+      resolvedAnilist = null
+    }
   }
 
   const base = mapJikanAnime(full.data, resolvedAnilist ?? malId)
