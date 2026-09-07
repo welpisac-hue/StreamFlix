@@ -47,7 +47,19 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   compress: true,
-  serverExternalPackages: ['@prisma/client', '.prisma/client', 'pg'],
+  serverExternalPackages: [
+    '@prisma/client',
+    '.prisma/client',
+    'pg',
+    'pg-cloudflare',
+  ],
+  // nft only traces pg-cloudflare's empty.js; OpenNext/workerd needs dist + esm
+  outputFileTracingIncludes: {
+    '/**': [
+      './node_modules/pg-cloudflare/dist/**',
+      './node_modules/pg-cloudflare/esm/**',
+    ],
+  },
   // Next 16 defaults to Turbopack; empty config allows webpack() for secure builds.
   turbopack: {},
   compiler: {
