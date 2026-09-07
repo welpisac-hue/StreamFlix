@@ -107,14 +107,12 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
       const res = await fetch(`${JIKAN_URL}${path}`, {
         headers: {
           Accept: 'application/json',
-          'User-Agent': 'StreamFlix/1.0 (anime catalog; contact via site)',
         },
-        // Avoid sticky empty/error caches on Cloudflare Workers
         cache: 'no-store',
       })
       if (res.status === 429 || res.status >= 500) {
         if (attempt < retries) {
-          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)))
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
           continue
         }
         return null
@@ -123,7 +121,7 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
       return (await res.json()) as T
     } catch {
       if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 700 * (attempt + 1)))
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
         continue
       }
       return null
@@ -134,14 +132,14 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
 
 async function fetchWithTimeout(
   url: string,
-  ms = 4000
+  ms = 2500
 ): Promise<Response | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
   try {
     return await fetch(url, {
       signal: controller.signal,
-      next: { revalidate: 86400 },
+      cache: 'no-store',
     })
   } catch {
     return null
@@ -382,59 +380,27 @@ async function detailsFromAnilist(id: number): Promise<AnimeDetails | null> {
 }
 
 /**
- * Load full details from Jikan by MAL id, then resolve the best AniList id
- * for TryEmbed (falls back to MAL id if ARM is unavailable).
+ * Load details from Jikan by MAL id.
+ * Keeps the critical path to one Jikan call so Cloudflare Workers don't 404
+ * from timeouts / rate-limits on optional ARM + extras requests.
  */
 async function detailsFromJikanByMal(
   malId: number,
   preferredAnilistId?: number | null
 ): Promise<AnimeDetails | null> {
-  const full = await jikanGet<{ data: any }>(`/anime/${malId}/full`)
+  const full =
+    (await jikanGet<{ data: any }>(`/anime/${malId}/full`)) ||
+    (await jikanGet<{ data: any }>(`/anime/${malId}`))
   if (!full?.data) return null
 
-  const resolvedAnilist =
-    preferredAnilistId && preferredAnilistId > 0
-      ? preferredAnilistId
-      : (await malToAnilist(malId)) ?? malId
+  // Resolve AniList id for TryEmbed without blocking the page on failure
+  let resolvedAnilist =
+    preferredAnilistId && preferredAnilistId > 0 ? preferredAnilistId : null
+  if (!resolvedAnilist) {
+    resolvedAnilist = await malToAnilist(malId)
+  }
 
-  const base = mapJikanAnime(full.data, resolvedAnilist)
-
-  // Optional extras — never fail the whole page if these rate-limit
-  const [charsRes, recRes] = await Promise.all([
-    jikanGet<{ data: any[] }>(`/anime/${malId}/characters`),
-    jikanGet<{ data: any[] }>(`/anime/${malId}/recommendations`),
-  ])
-
-  const characters = (charsRes?.data || []).slice(0, 12).map((c: any) => ({
-    id: c.character?.mal_id ?? 0,
-    name: c.character?.name || 'Unknown',
-    image:
-      c.character?.images?.webp?.image_url ||
-      c.character?.images?.jpg?.image_url ||
-      null,
-    role: c.role || 'Supporting',
-  }))
-
-  const recommendations: AnimeListItem[] = (recRes?.data || [])
-    .slice(0, 8)
-    .map((rec: any) => {
-      const entry = rec.entry
-      if (!entry?.mal_id) return null
-      return mapJikanAnime(
-        {
-          ...entry,
-          score: null,
-          episodes: null,
-          type: null,
-          status: null,
-          year: null,
-          genres: [],
-          synopsis: null,
-        },
-        entry.mal_id
-      )
-    })
-    .filter(Boolean) as AnimeListItem[]
+  const base = mapJikanAnime(full.data, resolvedAnilist ?? malId)
 
   const trailerYoutubeId =
     full.data.trailer?.youtube_id ||
@@ -453,43 +419,35 @@ async function detailsFromJikanByMal(
     duration: durationMins,
     studios: (full.data.studios || []).map((s: any) => s.name),
     trailerYoutubeId,
-    characters,
-    recommendations,
+    // Optional extras omitted on the critical path — page still renders
+    characters: [],
+    recommendations: [],
   }
 }
 
 async function resolveDetails(id: number): Promise<AnimeDetails | null> {
-  // Production / Cloudflare: catalog links use MAL ids — hit Jikan first.
-  // Avoid treating a MAL id as AniList (wrong title or empty 404).
+  // Race the common cases so one blocked upstream doesn't 404 the page.
+  const fromMal = detailsFromJikanByMal(id)
+  const fromAnilist = detailsFromAnilist(id)
+  const fromMapped = (async () => {
+    const mal = await anilistToMal(id)
+    if (!mal || mal === id) return null
+    return detailsFromJikanByMal(mal, id)
+  })()
+
   if (preferJikanPrimary()) {
-    const byMal = await detailsFromJikanByMal(id)
-    if (byMal) return byMal
-
-    const fromAl = await detailsFromAnilist(id)
-    if (fromAl) return fromAl
-
-    const malFromAnilist = await anilistToMal(id)
-    if (malFromAnilist && malFromAnilist !== id) {
-      const byMapped = await detailsFromJikanByMal(malFromAnilist, id)
-      if (byMapped) return byMapped
-    }
-    return null
+    const malHit = await fromMal
+    if (malHit) return malHit
+    const mappedHit = await fromMapped
+    if (mappedHit) return mappedHit
+    return await fromAnilist
   }
 
-  // Local / AniList-friendly: try AniList, then ID mapping, then MAL
-  const fromAl = await detailsFromAnilist(id)
-  if (fromAl) return fromAl
-
-  const malFromAnilist = await anilistToMal(id)
-  if (malFromAnilist) {
-    const byMapped = await detailsFromJikanByMal(malFromAnilist, id)
-    if (byMapped) return byMapped
-  }
-
-  const byMal = await detailsFromJikanByMal(id)
-  if (byMal) return byMal
-
-  return null
+  const alHit = await fromAnilist
+  if (alHit) return alHit
+  const mappedHit = await fromMapped
+  if (mappedHit) return mappedHit
+  return await fromMal
 }
 
 function jikanThenAnilist(
