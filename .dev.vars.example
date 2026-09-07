@@ -1,0 +1,14 @@
+# Copy to .dev.vars for local `npm run preview` (Wrangler).
+# Do NOT commit real secrets. Cloudflare dashboard vars are used in production.
+
+NEXTJS_ENV=production
+
+# Same values as your .env — paste your real ones locally into .dev.vars
+DATABASE_URL=
+DIRECT_URL=
+NEXTAUTH_URL=https://streamflix.<your-subdomain>.workers.dev
+NEXTAUTH_SECRET=
+ADMIN_PATH=ops-4bfd016ac34e03fd
+NEXT_PUBLIC_ADMIN_PATH=ops-4bfd016ac34e03fd
+TMDB_API_KEY=
+CONTACT_EMAIL=

@@ -47,6 +47,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   compress: true,
+  serverExternalPackages: ['@prisma/client', '.prisma/client', 'pg'],
   // Next 16 defaults to Turbopack; empty config allows webpack() for secure builds.
   turbopack: {},
   compiler: {
@@ -149,3 +150,5 @@ const nextConfig: NextConfig = {
 }
 
 export default nextConfig
+
+import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev());
