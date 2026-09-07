@@ -66,6 +66,28 @@ export default function WatchAnimePage() {
     )
   }
 
+  if (!anime) {
+    return (
+      <div className="min-h-screen">
+        <Navbar />
+        <div className="page-shell pb-16 pt-[calc(var(--nav-height)+3rem)] text-center">
+          <h1 className="font-[family-name:var(--font-anime-display)] text-3xl text-white">
+            Anime not found
+          </h1>
+          <p className="mt-2 text-zinc-400">
+            This title could not be loaded. Try another from the catalog.
+          </p>
+          <Link
+            href="/anime"
+            className="anime-cta-primary mt-6 inline-flex rounded-lg px-5 py-2.5 text-sm font-semibold"
+          >
+            Back to Anime
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen">
       <Navbar />
@@ -98,7 +120,7 @@ export default function WatchAnimePage() {
         </div>
 
         <AnimePlayer
-          anilistId={animeId}
+          anilistId={anime?.id ?? animeId}
           episode={epNum}
           title={`${title} EP ${epNum}`}
           startAt={startAt}

@@ -40,6 +40,7 @@ export default function CastGrid({
                 src={resolveImage(actor.profile_path)}
                 alt={actor.name}
                 loading="lazy"
+                referrerPolicy="no-referrer"
                 className="h-full w-full object-cover"
               />
             </div>

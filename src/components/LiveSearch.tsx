@@ -62,12 +62,14 @@ export default function LiveSearch({
       return
     }
 
+    const controller = new AbortController()
     setLoading(true)
     debounceRef.current = setTimeout(async () => {
       try {
         if (animeMode) {
           const res = await fetch(
-            `/api/anime?type=search&q=${encodeURIComponent(q)}&page=1`
+            `/api/anime?type=search&q=${encodeURIComponent(q)}&page=1&paged=1`,
+            { cache: 'no-store', signal: controller.signal }
           )
           if (!res.ok) throw new Error('search failed')
           const data = await res.json()
@@ -83,7 +85,8 @@ export default function LiveSearch({
           )
         } else {
           const res = await fetch(
-            `/api/tmdb/search?q=${encodeURIComponent(q)}&type=all`
+            `/api/tmdb/search?q=${encodeURIComponent(q)}&type=all`,
+            { signal: controller.signal }
           )
           if (!res.ok) throw new Error('search failed')
           const data = await res.json()
@@ -104,14 +107,16 @@ export default function LiveSearch({
           setSuggestions([...movies, ...shows].slice(0, 8))
         }
         setOpen(true)
-      } catch {
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return
         setSuggestions([])
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
-    }, 220)
+    }, animeMode ? 400 : 220)
 
     return () => {
+      controller.abort()
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [query, animeMode, searchLock.locked])

@@ -27,6 +27,19 @@ const MEDIA_FIELDS = `
   trailer { id site }
 `
 
+/**
+ * AniList blocks most Cloudflare Worker IPs. Prefer Jikan in production so
+ * lists, search, and detail pages stay online.
+ */
+function preferJikanPrimary(): boolean {
+  return (
+    process.env.NODE_ENV === 'production' ||
+    process.env.NEXTJS_ENV === 'production' ||
+    process.env.CF_PAGES === '1' ||
+    !!process.env.CF_WORKER
+  )
+}
+
 function pickTitle(titles: AnimeTitle, fallback = 'Untitled'): string {
   return titles.english || titles.romaji || titles.native || fallback
 }
@@ -96,11 +109,12 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
           Accept: 'application/json',
           'User-Agent': 'StreamFlix/1.0 (anime catalog; contact via site)',
         },
-        next: { revalidate: 300 },
+        // Avoid sticky empty/error caches on Cloudflare Workers
+        cache: 'no-store',
       })
       if (res.status === 429 || res.status >= 500) {
         if (attempt < retries) {
-          await new Promise((r) => setTimeout(r, 450 * (attempt + 1)))
+          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)))
           continue
         }
         return null
@@ -109,7 +123,7 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
       return (await res.json()) as T
     } catch {
       if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 450 * (attempt + 1)))
+        await new Promise((r) => setTimeout(r, 700 * (attempt + 1)))
         continue
       }
       return null
@@ -118,13 +132,30 @@ async function jikanGet<T>(path: string, retries = 2): Promise<T | null> {
   return null
 }
 
+async function fetchWithTimeout(
+  url: string,
+  ms = 4000
+): Promise<Response | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      next: { revalidate: 86400 },
+    })
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function malToAnilist(malId: number): Promise<number | null> {
   try {
-    const res = await fetch(
-      `${ARM_URL}?source=myanimelist&id=${malId}&include=anilist`,
-      { next: { revalidate: 86400 } }
+    const res = await fetchWithTimeout(
+      `${ARM_URL}?source=myanimelist&id=${malId}&include=anilist`
     )
-    if (!res.ok) return null
+    if (!res?.ok) return null
     const data = await res.json()
     return typeof data.anilist === 'number' ? data.anilist : null
   } catch {
@@ -134,11 +165,10 @@ async function malToAnilist(malId: number): Promise<number | null> {
 
 async function anilistToMal(anilistId: number): Promise<number | null> {
   try {
-    const res = await fetch(
-      `${ARM_URL}?source=anilist&id=${anilistId}&include=myanimelist`,
-      { next: { revalidate: 86400 } }
+    const res = await fetchWithTimeout(
+      `${ARM_URL}?source=anilist&id=${anilistId}&include=myanimelist`
     )
-    if (!res.ok) return null
+    if (!res?.ok) return null
     const data = await res.json()
     return typeof data.myanimelist === 'number' ? data.myanimelist : null
   } catch {
@@ -146,14 +176,15 @@ async function anilistToMal(anilistId: number): Promise<number | null> {
   }
 }
 
-function mapJikanAnime(item: any, anilistId: number): AnimeListItem {
+function mapJikanAnime(item: any, routeId: number): AnimeListItem {
   const titles: AnimeTitle = {
     romaji: item.title,
     english: item.title_english,
     native: item.title_japanese,
   }
   return {
-    id: anilistId,
+    // Prefer AniList ID when known (embeds). Otherwise MAL ID — detail page upgrades it.
+    id: routeId,
     malId: item.mal_id ?? null,
     title: pickTitle(titles, item.title),
     titles,
@@ -172,13 +203,11 @@ function mapJikanAnime(item: any, anilistId: number): AnimeListItem {
   }
 }
 
-async function mapJikanList(items: any[]): Promise<AnimeListItem[]> {
-  return Promise.all(
-    items.map(async (item) => {
-      const anilistId = (await malToAnilist(item.mal_id)) ?? item.mal_id
-      return mapJikanAnime(item, anilistId)
-    })
-  )
+/** Sync map — avoid N parallel ARM calls (rate limits / Worker subrequests). */
+function mapJikanList(items: any[]): AnimeListItem[] {
+  return items
+    .filter((item) => item?.mal_id)
+    .map((item) => mapJikanAnime(item, item.mal_id))
 }
 
 function hasItems(
@@ -291,7 +320,7 @@ async function jikanListPaged(
       items?: { total?: number }
     }
   }>(path)
-  const items = await mapJikanList(data?.data || [])
+  const items = mapJikanList(data?.data || [])
   const totalPages = data?.pagination?.last_visible_page || 1
   const total = data?.pagination?.items?.total || items.length
   return {
@@ -352,34 +381,46 @@ async function detailsFromAnilist(id: number): Promise<AnimeDetails | null> {
   }
 }
 
-async function detailsFromJikan(anilistId: number): Promise<AnimeDetails | null> {
-  const malId = (await anilistToMal(anilistId)) ?? anilistId
+/**
+ * Load full details from Jikan by MAL id, then resolve the best AniList id
+ * for TryEmbed (falls back to MAL id if ARM is unavailable).
+ */
+async function detailsFromJikanByMal(
+  malId: number,
+  preferredAnilistId?: number | null
+): Promise<AnimeDetails | null> {
   const full = await jikanGet<{ data: any }>(`/anime/${malId}/full`)
   if (!full?.data) return null
 
-  const base = mapJikanAnime(full.data, anilistId)
-  const charsRes = await jikanGet<{ data: any[] }>(`/anime/${malId}/characters`)
-  const recRes = await jikanGet<{ data: any[] }>(
-    `/anime/${malId}/recommendations`
-  )
+  const resolvedAnilist =
+    preferredAnilistId && preferredAnilistId > 0
+      ? preferredAnilistId
+      : (await malToAnilist(malId)) ?? malId
+
+  const base = mapJikanAnime(full.data, resolvedAnilist)
+
+  // Optional extras — never fail the whole page if these rate-limit
+  const [charsRes, recRes] = await Promise.all([
+    jikanGet<{ data: any[] }>(`/anime/${malId}/characters`),
+    jikanGet<{ data: any[] }>(`/anime/${malId}/recommendations`),
+  ])
 
   const characters = (charsRes?.data || []).slice(0, 12).map((c: any) => ({
-    id: c.character.mal_id,
-    name: c.character.name,
+    id: c.character?.mal_id ?? 0,
+    name: c.character?.name || 'Unknown',
     image:
-      c.character.images?.webp?.image_url ||
-      c.character.images?.jpg?.image_url ||
+      c.character?.images?.webp?.image_url ||
+      c.character?.images?.jpg?.image_url ||
       null,
     role: c.role || 'Supporting',
   }))
 
-  const recommendations: AnimeListItem[] = []
-  for (const rec of (recRes?.data || []).slice(0, 8)) {
-    const entry = rec.entry
-    if (!entry?.mal_id) continue
-    const mappedId = (await malToAnilist(entry.mal_id)) ?? entry.mal_id
-    recommendations.push(
-      mapJikanAnime(
+  const recommendations: AnimeListItem[] = (recRes?.data || [])
+    .slice(0, 8)
+    .map((rec: any) => {
+      const entry = rec.entry
+      if (!entry?.mal_id) return null
+      return mapJikanAnime(
         {
           ...entry,
           score: null,
@@ -390,10 +431,10 @@ async function detailsFromJikan(anilistId: number): Promise<AnimeDetails | null>
           genres: [],
           synopsis: null,
         },
-        mappedId
+        entry.mal_id
       )
-    )
-  }
+    })
+    .filter(Boolean) as AnimeListItem[]
 
   const trailerYoutubeId =
     full.data.trailer?.youtube_id ||
@@ -402,16 +443,63 @@ async function detailsFromJikan(anilistId: number): Promise<AnimeDetails | null>
       : null) ||
     null
 
+  const durationMins = full.data.duration
+    ? parseInt(String(full.data.duration), 10) || null
+    : null
+
   return {
     ...base,
-    duration: full.data.duration
-      ? parseInt(String(full.data.duration), 10) || null
-      : null,
+    malId: full.data.mal_id ?? malId,
+    duration: durationMins,
     studios: (full.data.studios || []).map((s: any) => s.name),
     trailerYoutubeId,
     characters,
     recommendations,
   }
+}
+
+async function resolveDetails(id: number): Promise<AnimeDetails | null> {
+  // Production / Cloudflare: catalog links use MAL ids — hit Jikan first.
+  // Avoid treating a MAL id as AniList (wrong title or empty 404).
+  if (preferJikanPrimary()) {
+    const byMal = await detailsFromJikanByMal(id)
+    if (byMal) return byMal
+
+    const fromAl = await detailsFromAnilist(id)
+    if (fromAl) return fromAl
+
+    const malFromAnilist = await anilistToMal(id)
+    if (malFromAnilist && malFromAnilist !== id) {
+      const byMapped = await detailsFromJikanByMal(malFromAnilist, id)
+      if (byMapped) return byMapped
+    }
+    return null
+  }
+
+  // Local / AniList-friendly: try AniList, then ID mapping, then MAL
+  const fromAl = await detailsFromAnilist(id)
+  if (fromAl) return fromAl
+
+  const malFromAnilist = await anilistToMal(id)
+  if (malFromAnilist) {
+    const byMapped = await detailsFromJikanByMal(malFromAnilist, id)
+    if (byMapped) return byMapped
+  }
+
+  const byMal = await detailsFromJikanByMal(id)
+  if (byMal) return byMal
+
+  return null
+}
+
+function jikanThenAnilist(
+  jikanFactories: Array<() => Promise<AnimePageResult | null>>,
+  anilistFactory: () => Promise<AnimePageResult | null>
+): Promise<AnimePageResult> {
+  if (preferJikanPrimary()) {
+    return firstPaged(...jikanFactories, anilistFactory)
+  }
+  return firstPaged(anilistFactory, ...jikanFactories)
 }
 
 export const animeApi = {
@@ -421,16 +509,21 @@ export const animeApi = {
   },
 
   getTrendingPaged: async (page = 1): Promise<AnimePageResult> => {
-    return firstPaged(
-      () => listFromAnilist('TRENDING_DESC', page),
-      () =>
-        jikanListPaged(`/top/anime?filter=airing&page=${page}&limit=24`, page),
-      () => jikanListPaged(`/top/anime?page=${page}&limit=24`, page),
-      () =>
-        jikanListPaged(
-          `/anime?order_by=members&sort=desc&page=${page}&limit=24&sfw=true`,
-          page
-        )
+    return jikanThenAnilist(
+      [
+        () =>
+          jikanListPaged(
+            `/top/anime?filter=airing&page=${page}&limit=24`,
+            page
+          ),
+        () => jikanListPaged(`/top/anime?page=${page}&limit=24`, page),
+        () =>
+          jikanListPaged(
+            `/anime?order_by=members&sort=desc&page=${page}&limit=24&sfw=true`,
+            page
+          ),
+      ],
+      () => listFromAnilist('TRENDING_DESC', page)
     )
   },
 
@@ -440,21 +533,21 @@ export const animeApi = {
   },
 
   getPopularPaged: async (page = 1): Promise<AnimePageResult> => {
-    return firstPaged(
-      () => listFromAnilist('POPULARITY_DESC', page),
-      () =>
-        jikanListPaged(
-          `/top/anime?filter=bypopularity&page=${page}&limit=24`,
-          page
-        ),
-      () =>
-        jikanListPaged(
-          `/anime?order_by=members&sort=desc&page=${page}&limit=24&sfw=true`,
-          page
-        ),
-      () => jikanListPaged(`/top/anime?page=${page}&limit=24`, page),
-      () =>
-        jikanListPaged(`/top/anime?filter=airing&page=${page}&limit=24`, page)
+    return jikanThenAnilist(
+      [
+        () =>
+          jikanListPaged(
+            `/top/anime?filter=bypopularity&page=${page}&limit=24`,
+            page
+          ),
+        () =>
+          jikanListPaged(
+            `/anime?order_by=members&sort=desc&page=${page}&limit=24&sfw=true`,
+            page
+          ),
+        () => jikanListPaged(`/top/anime?page=${page}&limit=24`, page),
+      ],
+      () => listFromAnilist('POPULARITY_DESC', page)
     )
   },
 
@@ -464,19 +557,16 @@ export const animeApi = {
   },
 
   getTopRatedPaged: async (page = 1): Promise<AnimePageResult> => {
-    return firstPaged(
-      () => listFromAnilist('SCORE_DESC', page),
-      () => jikanListPaged(`/top/anime?page=${page}&limit=24`, page),
-      () =>
-        jikanListPaged(
-          `/anime?order_by=score&sort=desc&page=${page}&limit=24&sfw=true`,
-          page
-        ),
-      () =>
-        jikanListPaged(
-          `/anime?order_by=members&sort=desc&page=${page}&limit=24&sfw=true`,
-          page
-        )
+    return jikanThenAnilist(
+      [
+        () => jikanListPaged(`/top/anime?page=${page}&limit=24`, page),
+        () =>
+          jikanListPaged(
+            `/anime?order_by=score&sort=desc&page=${page}&limit=24&sfw=true`,
+            page
+          ),
+      ],
+      () => listFromAnilist('SCORE_DESC', page)
     )
   },
 
@@ -486,13 +576,17 @@ export const animeApi = {
   },
 
   getUpcomingPaged: async (page = 1): Promise<AnimePageResult> => {
-    return firstPaged(
-      () => listFromAnilist('START_DATE_DESC', page),
-      () => jikanListPaged(`/seasons/upcoming?page=${page}&limit=24`, page),
-      () =>
-        jikanListPaged(`/seasons/now?page=${page}&limit=24`, page),
-      () =>
-        jikanListPaged(`/top/anime?filter=upcoming&page=${page}&limit=24`, page)
+    return jikanThenAnilist(
+      [
+        () => jikanListPaged(`/seasons/upcoming?page=${page}&limit=24`, page),
+        () => jikanListPaged(`/seasons/now?page=${page}&limit=24`, page),
+        () =>
+          jikanListPaged(
+            `/top/anime?filter=upcoming&page=${page}&limit=24`,
+            page
+          ),
+      ],
+      () => listFromAnilist('START_DATE_DESC', page)
     )
   },
 
@@ -502,55 +596,64 @@ export const animeApi = {
   },
 
   searchPaged: async (query: string, page = 1): Promise<AnimePageResult> => {
-    if (!query.trim()) {
+    const q = query.trim()
+    if (!q) {
       return { items: [], page: 1, totalPages: 1, total: 0, hasNextPage: false }
     }
-    return firstPaged(
-      () => searchAnilist(query, page),
-      () =>
-        jikanListPaged(
-          `/anime?q=${encodeURIComponent(query)}&page=${page}&limit=24&sfw=true`,
-          page
-        )
+    const encoded = encodeURIComponent(q)
+    return jikanThenAnilist(
+      [
+        () =>
+          jikanListPaged(
+            `/anime?q=${encoded}&page=${page}&limit=24&sfw=true`,
+            page
+          ),
+        () =>
+          jikanListPaged(
+            `/anime?q=${encoded}&page=${page}&limit=24&sfw=true&order_by=members&sort=desc`,
+            page
+          ),
+        () =>
+          jikanListPaged(
+            `/anime?q=${encoded}&page=${page}&limit=24&order_by=popularity&sort=asc`,
+            page
+          ),
+      ],
+      () => searchAnilist(q, page)
     )
   },
 
   getByGenre: async (genre: string, page = 1): Promise<AnimeListItem[]> => {
-    const data = await anilistQuery<{
-      Page: {
-        pageInfo: {
-          total: number
-          currentPage: number
-          lastPage: number
-          hasNextPage: boolean
+    if (!preferJikanPrimary()) {
+      const data = await anilistQuery<{
+        Page: {
+          media: any[]
         }
-        media: any[]
-      }
-    }>(
-      `query ($page: Int, $genre: String) {
-        Page(page: $page, perPage: 24) {
-          pageInfo { total currentPage lastPage hasNextPage }
-          media(type: ANIME, genre: $genre, sort: POPULARITY_DESC, isAdult: false) {
-            ${MEDIA_FIELDS}
+      }>(
+        `query ($page: Int, $genre: String) {
+          Page(page: $page, perPage: 24) {
+            media(type: ANIME, genre: $genre, sort: POPULARITY_DESC, isAdult: false) {
+              ${MEDIA_FIELDS}
+            }
           }
-        }
-      }`,
-      { page, genre }
-    )
-    if (data?.Page?.media) {
-      return data.Page.media.map(mapAnilistMedia)
+        }`,
+        { page, genre }
+      )
+      if (data?.Page?.media?.length) {
+        return data.Page.media.map(mapAnilistMedia)
+      }
     }
 
-    return mapJikanList(
-      (
-        await jikanGet<{ data: any[] }>(
-          `/anime?q=${encodeURIComponent(genre)}&page=${page}&limit=24&sfw=true&order_by=popularity&sort=asc`
-        )
-      )?.data || []
+    const encoded = encodeURIComponent(genre)
+    const result = await jikanListPaged(
+      `/anime?q=${encoded}&page=${page}&limit=24&sfw=true&order_by=members&sort=desc`,
+      page
     )
+    return result.items
   },
 
   getDetails: async (id: number): Promise<AnimeDetails | null> => {
-    return (await detailsFromAnilist(id)) || (await detailsFromJikan(id))
+    if (!Number.isFinite(id) || id <= 0) return null
+    return resolveDetails(id)
   },
 }
