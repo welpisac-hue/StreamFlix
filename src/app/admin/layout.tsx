@@ -20,12 +20,17 @@ export default async function AdminLayout({
     redirect('/auth/signin')
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true, bannedAt: true },
-  })
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, bannedAt: true },
+    })
 
-  if (!user || user.role !== 'ADMIN' || user.bannedAt) {
+    if (!user || user.role !== 'ADMIN' || user.bannedAt) {
+      redirect('/')
+    }
+  } catch (error) {
+    console.error('AdminLayout authorization error:', error)
     redirect('/')
   }
 

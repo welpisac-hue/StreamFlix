@@ -43,17 +43,28 @@ export async function requireAdmin(): Promise<
     }
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, username: true, role: true, name: true, bannedAt: true },
-  })
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, username: true, role: true, name: true, bannedAt: true },
+    })
 
-  if (!user || user.role !== 'ADMIN' || user.bannedAt) {
+    if (!user || user.role !== 'ADMIN' || user.bannedAt) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      }
+    }
+
+    return { ok: true, user }
+  } catch (error) {
+    console.error('requireAdmin error:', error)
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      response: NextResponse.json(
+        { error: 'Admin validation failed' },
+        { status: 500 }
+      ),
     }
   }
-
-  return { ok: true, user }
 }

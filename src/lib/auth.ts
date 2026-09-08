@@ -9,7 +9,43 @@ import { isAllowedAvatarSrc } from '@/lib/welcome-avatars'
 /** Re-check ban/role from DB this often (ms). Keep short so bans stick quickly. */
 const ROLE_REFRESH_MS = 30 * 1000
 
+const useSecureCookies =
+  process.env.NODE_ENV === 'production' ||
+  (typeof process.env.NEXTAUTH_URL === 'string' &&
+    process.env.NEXTAUTH_URL.startsWith('https://'))
+
+const cookiePrefix = useSecureCookies ? '__Secure-' : ''
+
 export const authOptions: NextAuthOptions = {
+  cookies: {
+    sessionToken: {
+      name: `${cookiePrefix}next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+    callbackUrl: {
+      name: `${cookiePrefix}next-auth.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+    csrfToken: {
+      name: `${useSecureCookies ? '__Host-' : ''}next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+  },
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -209,5 +245,5 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
 }

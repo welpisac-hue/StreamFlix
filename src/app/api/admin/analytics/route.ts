@@ -12,6 +12,7 @@ export async function GET() {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
+    // Batch 1: High-level counts
     const [
       totalUsers,
       adminUsers,
@@ -19,18 +20,6 @@ export async function GET() {
       pageViewsToday,
       pageViewsWeek,
       uniqueVisitorsWeek,
-      totalWatchEvents,
-      completedWatches,
-      totalWatchLater,
-      totalReviews,
-      avgRating,
-      activeInvites,
-      inviteRedemptions,
-      recentUsers,
-      topRated,
-      mostWatched,
-      topPages,
-      signupsByDay,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: 'ADMIN' } }),
@@ -41,6 +30,18 @@ export async function GET() {
         by: ['userId'],
         where: { createdAt: { gte: weekAgo }, userId: { not: null } },
       }),
+    ])
+
+    // Batch 2: Activity and engagement counts
+    const [
+      totalWatchEvents,
+      completedWatches,
+      totalWatchLater,
+      totalReviews,
+      avgRating,
+      activeInvites,
+      inviteRedemptions,
+    ] = await Promise.all([
       prisma.watchHistory.count(),
       prisma.watchHistory.count({ where: { completed: true } }),
       prisma.watchLater.count(),
@@ -48,6 +49,16 @@ export async function GET() {
       prisma.review.aggregate({ _avg: { rating: true } }),
       prisma.inviteCode.count({ where: { isActive: true } }),
       prisma.inviteRedemption.count(),
+    ])
+
+    // Batch 3: Aggregates and lists
+    const [
+      recentUsers,
+      topRated,
+      mostWatched,
+      topPages,
+      signupsByDay,
+    ] = await Promise.all([
       prisma.user.findMany({
         orderBy: { createdAt: 'desc' },
         take: 8,
