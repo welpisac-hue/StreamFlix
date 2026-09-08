@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ChevronLeft, Play } from 'lucide-react'
 import { tmdb } from '@/lib/tmdb'
 import Navbar from '@/components/Navbar'
+import SiteFooter from '@/components/SiteFooter'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,6 +107,7 @@ export default async function SeasonPage({
           )}
         </div>
       </div>
+      <SiteFooter />
     </div>
   )
 }

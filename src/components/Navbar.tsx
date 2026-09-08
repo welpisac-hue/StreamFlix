@@ -20,6 +20,8 @@ import { useSession, signOut } from 'next-auth/react'
 import ModeToggle from '@/components/ModeToggle'
 import AnimeLanguageButton from '@/components/anime/AnimeLanguageButton'
 import LiveSearch from '@/components/LiveSearch'
+import SurpriseWheelModal from '@/components/SurpriseWheelModal'
+import { ListPlus } from 'lucide-react'
 import { getAdminPath } from '@/lib/admin-path'
 import { useSiteExperience } from '@/components/SiteExperience'
 
@@ -27,12 +29,14 @@ const movieLinks = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/movies', label: 'Movies', icon: Film },
   { href: '/tv', label: 'TV', icon: Tv },
+  { href: '/playlists', label: 'Playlists', icon: ListPlus },
   { href: '/my-list', label: 'My List', icon: Heart },
 ]
 
 const animeLinks = [
   { href: '/anime', label: 'Home', icon: Home },
   { href: '/anime/browse', label: 'Browse', icon: Compass },
+  { href: '/playlists', label: 'Playlists', icon: ListPlus },
   { href: '/anime/my-list', label: 'My List', icon: Heart },
 ]
 
@@ -168,6 +172,8 @@ export default function Navbar() {
               inputClassName={searchInputClass}
             />
 
+            <SurpriseWheelModal />
+
             {session ? (
               <div className="relative group">
                 <button
@@ -272,11 +278,29 @@ export default function Navbar() {
                 <NavItem key={href} href={href} label={label} icon={Icon} />
               ))}
               {session && (
-                <NavItem
-                  href={continueHref}
-                  label="Continue Watching"
-                  icon={Clock}
-                />
+                <>
+                  <NavItem
+                    href={continueHref}
+                    label="Continue Watching"
+                    icon={Clock}
+                  />
+                  <NavItem href="/profile" label="Profile" icon={User} />
+                  {session.user?.role === 'ADMIN' && (
+                    <NavItem
+                      href={getAdminPath()}
+                      label="Admin Dashboard"
+                      icon={Lock}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleSignOut()}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-white/5"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </button>
+                </>
               )}
             </div>
           </div>

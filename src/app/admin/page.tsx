@@ -24,6 +24,11 @@ import {
 import toast from 'react-hot-toast'
 import AdminUserPanel from '@/components/admin/AdminUserPanel'
 import AdminSettingsTab from '@/components/admin/AdminSettingsTab'
+import AdminReportsTab from '@/components/admin/AdminReportsTab'
+import AdminFeaturedTab from '@/components/admin/AdminFeaturedTab'
+import AdminActivityFeed from '@/components/admin/AdminActivityFeed'
+import AdminWatchPartyCreator from '@/components/admin/AdminWatchPartyCreator'
+import { AlertTriangle, Sparkles } from 'lucide-react'
 
 type Overview = {
   totalUsers: number
@@ -143,7 +148,7 @@ type FriendAudit = {
   }>
 }
 
-type Tab = 'overview' | 'users' | 'invites' | 'friends' | 'settings'
+type Tab = 'overview' | 'users' | 'invites' | 'friends' | 'reports' | 'featured' | 'settings' | 'watch-party'
 
 function StatCard({
   label,
@@ -339,6 +344,9 @@ export default function AdminDashboardPage() {
             [
               ['overview', 'Overview', BarChart3],
               ['users', 'Users', Users],
+              ['reports', 'Health Queue', AlertTriangle],
+              ['featured', 'Featured Hero', Sparkles],
+              ['watch-party', 'Watch Party', Users],
               ['invites', 'Invite codes', KeyRound],
               ['friends', 'Friend invites', UserPlus],
               ['settings', 'Site settings', Settings],
@@ -350,7 +358,7 @@ export default function AdminDashboardPage() {
               onClick={() => setTab(id)}
               className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
                 tab === id
-                  ? 'bg-[var(--primary)] text-white'
+                  ? id === 'watch-party' ? 'bg-purple-600 text-white' : 'bg-[var(--primary)] text-white'
                   : 'bg-white/5 text-zinc-300 hover:bg-white/10'
               }`}
             >
@@ -492,6 +500,14 @@ export default function AdminDashboardPage() {
                 </div>
               </section>
             </div>
+
+            <AdminActivityFeed />
+          </div>
+        )}
+
+        {tab === 'watch-party' && (
+          <div className="space-y-6">
+            <AdminWatchPartyCreator />
           </div>
         )}
 
@@ -578,6 +594,10 @@ export default function AdminDashboardPage() {
             </table>
           </section>
         )}
+
+        {tab === 'reports' && <AdminReportsTab />}
+
+        {tab === 'featured' && <AdminFeaturedTab />}
 
         {tab === 'settings' && <AdminSettingsTab />}
 

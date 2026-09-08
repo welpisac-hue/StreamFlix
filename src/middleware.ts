@@ -85,7 +85,11 @@ export default withAuth(
         if (
           pathname.startsWith('/auth') ||
           pathname.startsWith('/api/auth') ||
-          pathname.startsWith('/legal')
+          pathname.startsWith('/legal') ||
+          pathname === '/contact' ||
+          pathname === '/faq' ||
+          pathname === '/about' ||
+          pathname === '/api/contact'
         ) {
           return true
         }

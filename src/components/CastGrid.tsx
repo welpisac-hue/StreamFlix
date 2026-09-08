@@ -1,4 +1,8 @@
+'use client'
+
+import Link from 'next/link'
 import { getImageUrl } from '@/lib/tmdb/images'
+import { playSound } from '@/lib/sound'
 
 export interface CastMember {
   id: number
@@ -34,17 +38,22 @@ export default function CastGrid({
       </h2>
       <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         {people.map((actor) => (
-          <div key={actor.id} className="flex flex-col items-center text-center">
-            <div className="relative h-20 w-20 overflow-hidden rounded-full bg-zinc-800 ring-2 ring-white/10 transition hover:ring-[var(--primary)]/60 sm:h-24 sm:w-24">
+          <Link
+            key={actor.id}
+            href={`/person/${actor.id}`}
+            onMouseEnter={() => playSound.hover()}
+            className="group flex flex-col items-center text-center transition"
+          >
+            <div className="relative h-20 w-20 overflow-hidden rounded-full bg-zinc-800 ring-2 ring-white/10 transition group-hover:scale-105 group-hover:ring-[var(--primary)]/80 sm:h-24 sm:w-24">
               <img
                 src={resolveImage(actor.profile_path)}
                 alt={actor.name}
                 loading="lazy"
                 referrerPolicy="no-referrer"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover transition group-hover:scale-110"
               />
             </div>
-            <p className="mt-2.5 line-clamp-2 text-sm font-semibold text-zinc-100">
+            <p className="mt-2.5 line-clamp-2 text-sm font-semibold text-zinc-100 transition group-hover:text-[var(--primary)]">
               {actor.name}
             </p>
             {actor.character && (
@@ -52,7 +61,7 @@ export default function CastGrid({
                 {actor.character}
               </p>
             )}
-          </div>
+          </Link>
         ))}
       </div>
     </section>

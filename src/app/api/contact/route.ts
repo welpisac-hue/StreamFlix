@@ -8,14 +8,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const userId = session?.user?.id
+    const rateLimitId = userId ? `contact:${userId}:${clientKey(request)}` : `contact:guest:${clientKey(request)}`
 
-    const limited = rateLimit(
-      `contact:${session.user.id}:${clientKey(request)}`,
-      { limit: 5, windowMs: 60 * 60 * 1000 }
-    )
+    const limited = rateLimit(rateLimitId, { limit: 5, windowMs: 60 * 60 * 1000 })
     if (!limited.ok) {
       return NextResponse.json(
         { error: 'Too many messages. Try again later.' },
@@ -46,8 +42,8 @@ export async function POST(request: Request) {
     // Email delivery is not wired yet; log for operators and acknowledge receipt.
     // Do not echo CONTACT_EMAIL back to clients.
     console.log('Contact form submission:', {
-      userId: session.user.id,
-      username: session.user.username,
+      userId: userId || 'guest',
+      username: session?.user?.username || 'Guest',
       name,
       email,
       subject,

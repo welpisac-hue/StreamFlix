@@ -30,6 +30,16 @@ export default function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/anime" className="hover:text-white">
+                  Anime Hub
+                </Link>
+              </li>
+              <li>
+                <Link href="/playlists" className="hover:text-white">
+                  Community Playlists
+                </Link>
+              </li>
+              <li>
                 <Link href="/search" className="hover:text-white">
                   Search
                 </Link>

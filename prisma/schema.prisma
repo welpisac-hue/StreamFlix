@@ -46,6 +46,10 @@ model User {
   pollVotes               PollVote[]
   dismissedPolls          DismissedPoll[]
   dismissedAnnouncements  DismissedAnnouncement[]
+  streamReports           StreamReport[]
+  playlists               Playlist[]
+  hostedParties           WatchPartyRoom[]
+  partyMessages           WatchPartyMessage[]
 }
 
 model Account {
@@ -254,4 +258,109 @@ model DismissedAnnouncement {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, announcementKey])
+}
+
+model StreamReport {
+  id            String   @id @default(cuid())
+  userId        String?
+  tmdbId        Int
+  mediaType     String
+  seasonNumber  Int?
+  episodeNumber Int?
+  issueType     String
+  details       String?
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([tmdbId])
+}
+
+model FeaturedContent {
+  id           String   @id @default(cuid())
+  tmdbId       Int
+  title        String
+  overview     String?
+  posterPath   String?
+  backdropPath String?
+  mediaType    String   @default("movie")
+  badgeText    String?
+  order        Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([isActive, order])
+}
+
+model Playlist {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items PlaylistItem[]
+
+  @@index([userId])
+  @@index([isPublic])
+}
+
+model PlaylistItem {
+  id         String   @id @default(cuid())
+  playlistId String
+  tmdbId     Int
+  title      String
+  posterPath String?
+  mediaType  String
+  order      Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, tmdbId, mediaType])
+  @@index([playlistId])
+}
+
+model WatchPartyRoom {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  hostUserId    String
+  tmdbId        Int
+  title         String
+  mediaType     String
+  seasonNumber  Int?
+  episodeNumber Int?
+  currentTime     Float    @default(0)
+  isPlaying       Boolean  @default(true)
+  scheduledStartTime DateTime?
+  maxUsers        Int      @default(50)
+  isChatMuted     Boolean  @default(false)
+  chatCooldownSec Int      @default(0)
+  mutedUserIds    String[] @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  host     User                @relation(fields: [hostUserId], references: [id], onDelete: Cascade)
+  messages WatchPartyMessage[]
+
+  @@index([code])
+}
+
+model WatchPartyMessage {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  sender    String
+  text      String
+  createdAt DateTime @default(now())
+
+  room WatchPartyRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
 }

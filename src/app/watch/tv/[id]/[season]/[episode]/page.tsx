@@ -102,6 +102,11 @@ export default function WatchTVPage() {
           episode={episodeNumber}
           title={`${show?.name || 'Show'} S${seasonNumber}E${episodeNumber}`}
           startAt={startAt}
+          nextHref={
+            hasNextEpisode
+              ? `/watch/tv/${tvId}/${seasonNumber}/${epNum + 1}`
+              : undefined
+          }
         />
 
         <div className="mt-4 flex flex-wrap gap-3">

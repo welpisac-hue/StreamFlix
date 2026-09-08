@@ -157,7 +157,7 @@ export default function ContinueWatchingPage() {
                             ? `/watch/movie/${item.tmdbId}`
                             : item.mediaType === 'anime'
                               ? `/watch/anime/${item.tmdbId}/${item.episodeNumber || 1}`
-                              : `/watch/tv/${item.tmdbId}/${item.seasonNumber}/${item.episodeNumber}`
+                              : `/watch/tv/${item.tmdbId}/${item.seasonNumber || 1}/${item.episodeNumber || 1}`
                         }
                         className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
                       >
@@ -206,7 +206,7 @@ export default function ContinueWatchingPage() {
                           ? `/watch/movie/${item.tmdbId}`
                           : item.mediaType === 'anime'
                             ? `/watch/anime/${item.tmdbId}/${item.episodeNumber || 1}`
-                            : `/watch/tv/${item.tmdbId}/${item.seasonNumber}/${item.episodeNumber}`
+                            : `/watch/tv/${item.tmdbId}/${item.seasonNumber || 1}/${item.episodeNumber || 1}`
                       }
                       className="mt-3 block w-full bg-red-600 text-white text-center py-2 rounded hover:bg-red-700 transition-colors"
                     >

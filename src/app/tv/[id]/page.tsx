@@ -5,6 +5,8 @@ import { tmdb } from '@/lib/tmdb'
 import Navbar from '@/components/Navbar'
 import ReviewSection from '@/components/ReviewSection'
 import WatchLaterButton from '@/components/WatchLaterButton'
+import AddToPlaylistButton from '@/components/AddToPlaylistButton'
+import StartWatchPartyButton from '@/components/StartWatchPartyButton'
 import MovieCard from '@/components/MovieCard'
 import SiteFooter from '@/components/SiteFooter'
 import TrailerButton from '@/components/TrailerButton'
@@ -105,6 +107,19 @@ export default async function TVShowPage({
                   title={show.name}
                   posterPath={show.poster_path}
                   mediaType="tv"
+                />
+                <AddToPlaylistButton
+                  tmdbId={show.id}
+                  title={show.name}
+                  posterPath={show.poster_path}
+                  mediaType="tv"
+                />
+                <StartWatchPartyButton
+                  tmdbId={show.id}
+                  title={show.name}
+                  mediaType="tv"
+                  seasonNumber={watchSeason}
+                  episodeNumber={1}
                 />
               </div>
             </div>

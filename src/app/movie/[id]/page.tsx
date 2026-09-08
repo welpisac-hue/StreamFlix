@@ -5,6 +5,8 @@ import { tmdb } from '@/lib/tmdb'
 import Navbar from '@/components/Navbar'
 import ReviewSection from '@/components/ReviewSection'
 import WatchLaterButton from '@/components/WatchLaterButton'
+import AddToPlaylistButton from '@/components/AddToPlaylistButton'
+import StartWatchPartyButton from '@/components/StartWatchPartyButton'
 import MovieCard from '@/components/MovieCard'
 import SiteFooter from '@/components/SiteFooter'
 import TrailerButton from '@/components/TrailerButton'
@@ -101,6 +103,17 @@ export default async function MoviePage({
                   tmdbId={movie.id}
                   title={movie.title}
                   posterPath={movie.poster_path}
+                  mediaType="movie"
+                />
+                <AddToPlaylistButton
+                  tmdbId={movie.id}
+                  title={movie.title}
+                  posterPath={movie.poster_path}
+                  mediaType="movie"
+                />
+                <StartWatchPartyButton
+                  tmdbId={movie.id}
+                  title={movie.title}
                   mediaType="movie"
                 />
               </div>
