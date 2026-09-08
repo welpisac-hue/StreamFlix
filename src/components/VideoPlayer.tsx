@@ -41,10 +41,13 @@ export default function VideoPlayer(props: VideoPlayerProps) {
   const [theaterMode, setTheaterMode] = useState(false)
   const [ambientGlow, setAmbientGlow] = useState(true)
   const [soundActive, setSoundActive] = useState(true)
-  const [showSkipIntro, setShowSkipIntro] = useState(true)
-  const [seekOffset, setSeekOffset] = useState(0)
+  // Skip Intro state — only relevant for TV/anime
+  const [showSkipIntro, setShowSkipIntro] = useState(false)
+  const [skipIntroDuration, setSkipIntroDuration] = useState(0)
+  const [introVisible, setIntroVisible] = useState(false)
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const introTimerRef = useRef<NodeJS.Timeout | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const currentTimeRef = useRef<number>(0)
 
@@ -52,32 +55,64 @@ export default function VideoPlayer(props: VideoPlayerProps) {
     setSoundActive(isSoundEnabled())
   }, [])
 
+  // Fetch intro info for TV shows only
+  useEffect(() => {
+    setShowSkipIntro(false)
+    setIntroVisible(false)
+    setSkipIntroDuration(0)
+    if (props.mediaType === 'movie') return
+
+    const season = (props as TVProps).season || 1
+    const episode = (props as TVProps).episode || 1
+
+    fetch(
+      `/api/intro?tmdbId=${props.tmdbId}&season=${season}&episode=${episode}&mediaType=${props.mediaType}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.hasIntro && data.duration > 0) {
+          setSkipIntroDuration(data.duration)
+          setShowSkipIntro(true)
+          setIntroVisible(true)
+          // Auto-fade after 10 seconds
+          introTimerRef.current = setTimeout(() => {
+            setIntroVisible(false)
+          }, 10000)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      if (introTimerRef.current) clearTimeout(introTimerRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.tmdbId, (props as TVProps).season, (props as TVProps).episode, props.mediaType])
+
   const embedUrl = useMemo(() => {
     const baseProgress = props.startAt && props.startAt > 15 ? props.startAt : 0
-    const progress = baseProgress + seekOffset > 15 ? baseProgress + seekOffset : undefined
+    const progress = baseProgress > 15 ? baseProgress : undefined
     if (props.mediaType === 'movie') {
       return getMovieEmbedUrl(props.tmdbId, { progress })
     }
-    return getTVEmbedUrl(props.tmdbId, props.season || 1, props.episode || 1, {
+    return getTVEmbedUrl(props.tmdbId, (props as TVProps).season || 1, (props as TVProps).episode || 1, {
       progress,
     })
-  }, [props, seekOffset])
+  }, [props])
 
-  // Handle Skip Intro (+85 seconds iframe refresh or seek trigger)
+  // Handle Skip Intro — NO iframe reload, just postMessage seek
   const handleSkipIntro = () => {
     playSound.click()
     setShowSkipIntro(false)
-    setSeekOffset((prev) => prev + 85)
+    setIntroVisible(false)
+    if (introTimerRef.current) clearTimeout(introTimerRef.current)
+    const seekTo = (currentTimeRef.current || 0) + skipIntroDuration
     try {
       iframeRef.current?.contentWindow?.postMessage(
-        {
-          type: 'PLAYER_COMMAND',
-          data: { command: 'seek', time: (currentTimeRef.current || 0) + 85 },
-        },
+        { type: 'PLAYER_COMMAND', data: { command: 'seek', time: seekTo } },
         '*'
       )
     } catch {
-      // ignore
+      // ignore cross-origin restriction
     }
   }
 
@@ -236,16 +271,20 @@ export default function VideoPlayer(props: VideoPlayerProps) {
             />
           </div>
 
-          {/* Skip Intro Overlay Button */}
+          {/* Skip Intro Overlay — TV/Anime only, auto-fades after 10s */}
           {showSkipIntro && (
-            <div className="absolute bottom-12 right-6 z-20">
+            <div
+              className={`absolute bottom-12 right-6 z-20 transition-opacity duration-700 ${
+                introVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
+            >
               <button
                 type="button"
                 onClick={handleSkipIntro}
                 className="group inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/80 px-4 py-2 text-xs font-bold text-white shadow-2xl backdrop-blur transition hover:scale-105 hover:border-[var(--primary)] hover:bg-black"
               >
                 <FastForward className="h-4 w-4 text-[var(--primary)] group-hover:animate-pulse" />
-                Skip Intro (+85s)
+                Skip Intro
               </button>
             </div>
           )}
