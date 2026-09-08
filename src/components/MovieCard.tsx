@@ -17,6 +17,8 @@ interface MediaCardProps {
   className?: string
   /** Optional stagger index kept for call-site compatibility */
   index?: number
+  /** Recommendation attribution label */
+  becauseYouWatched?: string | null
 }
 
 function resolvePoster(posterPath: string | null): string {
@@ -33,6 +35,7 @@ export default function MovieCard({
   mediaType,
   year,
   className = '',
+  becauseYouWatched,
 }: MediaCardProps) {
   const imageUrl = resolvePoster(posterPath)
   const href = mediaType === 'anime' ? `/anime/${id}` : `/${mediaType}/${id}`
@@ -96,9 +99,14 @@ export default function MovieCard({
         <Link href={href} className="truncate text-sm font-semibold text-zinc-100 block transition group-hover:text-white">
           {title}
         </Link>
-        {year != null && year !== '' && (
+        {becauseYouWatched ? (
+          <p className="truncate text-[11px] text-zinc-500">
+            Because you watched{' '}
+            <span className="text-zinc-400">{becauseYouWatched}</span>
+          </p>
+        ) : year != null && year !== '' ? (
           <p className="text-xs text-zinc-500">{year}</p>
-        )}
+        ) : null}
       </div>
     </div>
   )

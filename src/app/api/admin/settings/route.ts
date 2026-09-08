@@ -48,7 +48,7 @@ export async function PATCH(request: Request) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.response
 
-  const limited = rateLimit(`admin:settings:${auth.user.id}`, {
+  const limited = await rateLimit(`admin:settings:${auth.user.id}`, {
     limit: 40,
     windowMs: 60_000,
   })

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.response
 
-  const limited = rateLimit(`admin:polls:create:${auth.user.id}`, {
+  const limited = await rateLimit(`admin:polls:create:${auth.user.id}`, {
     limit: 20,
     windowMs: 60_000,
   })

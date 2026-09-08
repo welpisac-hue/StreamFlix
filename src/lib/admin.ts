@@ -26,7 +26,7 @@ export async function requireAdmin(): Promise<
     }
   }
 
-  const limited = rateLimit(`admin:api:${session.user.id}`, {
+  const limited = await rateLimit(`admin:api:${session.user.id}`, {
     limit: 120,
     windowMs: 60_000,
   })

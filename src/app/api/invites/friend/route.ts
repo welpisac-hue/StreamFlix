@@ -118,7 +118,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const limited = rateLimit(`friend-invite:get:${session.user.id}`, {
+  const limited = await rateLimit(`friend-invite:get:${session.user.id}`, {
     limit: 60,
     windowMs: 60_000,
   })
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const limited = rateLimit(
+  const limited = await rateLimit(
     `friend-invite:post:${session.user.id}:${clientKey(request)}`,
     { limit: 5, windowMs: 60_000 }
   )

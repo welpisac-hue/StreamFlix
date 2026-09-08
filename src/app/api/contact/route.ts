@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const userId = session?.user?.id
     const rateLimitId = userId ? `contact:${userId}:${clientKey(request)}` : `contact:guest:${clientKey(request)}`
 
-    const limited = rateLimit(rateLimitId, { limit: 5, windowMs: 60 * 60 * 1000 })
+    const limited = await rateLimit(rateLimitId, { limit: 5, windowMs: 60 * 60 * 1000 })
     if (!limited.ok) {
       return NextResponse.json(
         { error: 'Too many messages. Try again later.' },

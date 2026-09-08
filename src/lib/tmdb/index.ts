@@ -265,6 +265,53 @@ export const tmdb = {
     return response.data.results as Movie[]
   },
 
+  /** Movies with a primary release date on or after today, soonest first. */
+  getComingSoonMovies: async (page: number = 1) => {
+    const today = new Date()
+    const y = today.getFullYear()
+    const m = String(today.getMonth() + 1).padStart(2, '0')
+    const d = String(today.getDate()).padStart(2, '0')
+    const todayStr = `${y}-${m}-${d}`
+
+    const response = await tmdbApi.get('/discover/movie', {
+      params: {
+        'primary_release_date.gte': todayStr,
+        sort_by: 'primary_release_date.asc',
+        include_adult: false,
+        page,
+      },
+    })
+    return response.data.results as Movie[]
+  },
+
+  getMovieRecommendations: async (movieId: number, page: number = 1) => {
+    const response = await tmdbApi.get(`/movie/${movieId}/recommendations`, {
+      params: { page },
+    })
+    return response.data.results as Movie[]
+  },
+
+  getTVRecommendations: async (tvId: number, page: number = 1) => {
+    const response = await tmdbApi.get(`/tv/${tvId}/recommendations`, {
+      params: { page },
+    })
+    return response.data.results as TVShow[]
+  },
+
+  getMovieSimilar: async (movieId: number, page: number = 1) => {
+    const response = await tmdbApi.get(`/movie/${movieId}/similar`, {
+      params: { page },
+    })
+    return response.data.results as Movie[]
+  },
+
+  getTVSimilar: async (tvId: number, page: number = 1) => {
+    const response = await tmdbApi.get(`/tv/${tvId}/similar`, {
+      params: { page },
+    })
+    return response.data.results as TVShow[]
+  },
+
   getPopularPeople: async (page: number = 1) => {
     const response = await tmdbApi.get('/person/popular', { params: { page } })
     return (response.data.results || []) as Array<{

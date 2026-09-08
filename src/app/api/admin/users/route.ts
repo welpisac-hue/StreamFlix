@@ -54,7 +54,7 @@ export async function PATCH(request: Request) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.response
 
-  const limited = rateLimit(`admin:users:patch:${auth.user.id}`, {
+  const limited = await rateLimit(`admin:users:patch:${auth.user.id}`, {
     limit: 40,
     windowMs: 60_000,
   })
@@ -149,7 +149,7 @@ export async function DELETE(request: Request) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.response
 
-  const limited = rateLimit(`admin:users:delete:${auth.user.id}`, {
+  const limited = await rateLimit(`admin:users:delete:${auth.user.id}`, {
     limit: 20,
     windowMs: 60_000,
   })

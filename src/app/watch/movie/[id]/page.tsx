@@ -72,6 +72,8 @@ export default function WatchMoviePage() {
           mediaType="movie"
           tmdbId={movieId}
           title={movie?.title || 'Movie'}
+          overview={movie?.overview}
+          posterPath={movie?.poster_path}
           startAt={startAt}
         />
 

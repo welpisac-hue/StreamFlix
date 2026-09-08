@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const limited = rateLimit(`site:action:${session.user.id}`, {
+  const limited = await rateLimit(`site:action:${session.user.id}`, {
     limit: 60,
     windowMs: 60_000,
   })

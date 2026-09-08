@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -26,9 +26,24 @@ export async function DELETE(
       )
     }
 
-    await prisma.watchHistory.delete({
-      where: { id },
-    })
+    const { searchParams } = new URL(request.url)
+    const deleteSeries = searchParams.get('series') === '1'
+    const isSeries =
+      watchHistory.mediaType === 'tv' || watchHistory.mediaType === 'anime'
+
+    if (deleteSeries && isSeries) {
+      await prisma.watchHistory.deleteMany({
+        where: {
+          userId: session.user.id,
+          tmdbId: watchHistory.tmdbId,
+          mediaType: watchHistory.mediaType,
+        },
+      })
+    } else {
+      await prisma.watchHistory.delete({
+        where: { id },
+      })
+    }
 
     return NextResponse.json({ message: 'Watch history entry deleted' })
   } catch (error) {

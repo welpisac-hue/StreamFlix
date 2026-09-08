@@ -38,7 +38,9 @@ export function getTVEmbedUrl(
   const params = new URLSearchParams({
     color: ACCENT,
     autoPlay: 'true',
-    nextEpisode: 'true',
+    // Keep embed auto-next OFF — our VideoPlayer owns next-episode navigation.
+    // Dual auto-next was causing rapid episode hopping + restart loops.
+    nextEpisode: 'false',
     episodeSelector: 'true',
   })
   if (options?.progress && options.progress > 0) {

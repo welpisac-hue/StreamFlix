@@ -134,7 +134,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const limited = rateLimit(`party:create:${session.user.id}`, {
+    const limited = await rateLimit(`party:create:${session.user.id}`, {
       limit: 20,
       windowMs: 60 * 60 * 1000,
     })

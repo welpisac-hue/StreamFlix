@@ -92,16 +92,21 @@ export default function SiteExperience({
     }
   }, [authStatus])
 
+  const onWatchPage = pathname.startsWith('/watch')
+
   useEffect(() => {
     void refresh()
-  }, [refresh, pathname])
+    // While watching, don't refetch on every episode change — use a stable key
+  }, [refresh, onWatchPage ? '__watch__' : pathname])
 
   // Keep maintenance / polls fresh even when staying on the same page
   useEffect(() => {
     if (authStatus !== 'authenticated') return
+    if (onWatchPage) return
+
     const id = window.setInterval(() => {
       void refresh()
-    }, 15_000)
+    }, 60_000)
     const onFocus = () => {
       void refresh()
     }
@@ -115,7 +120,7 @@ export default function SiteExperience({
       window.removeEventListener('focus', onFocus)
       window.removeEventListener('streamflix:site-refresh', onAdminSave)
     }
-  }, [authStatus, refresh])
+  }, [authStatus, refresh, onWatchPage])
 
   useEffect(() => {
     if (!status?.banned) return

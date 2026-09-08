@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateRecommendationCache } from '@/lib/recommendation-cache'
 
 export async function GET(request: Request) {
   try {
@@ -84,6 +85,8 @@ export async function POST(request: Request) {
         where: { id: existingEntry.id },
       })
 
+      await invalidateRecommendationCache(userId)
+
       return NextResponse.json({
         message: 'Removed from watch later',
         removed: true,
@@ -99,6 +102,8 @@ export async function POST(request: Request) {
         mediaType,
       },
     })
+
+    await invalidateRecommendationCache(userId)
 
     return NextResponse.json(
       { ...watchLater, message: 'Added to watch later', removed: false },

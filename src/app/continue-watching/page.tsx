@@ -1,30 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { Clock, Play, Trash2 } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import { getImageUrl } from '@/lib/tmdb/images'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-
-interface WatchHistoryItem {
-  id: string
-  tmdbId: number
-  title: string
-  posterPath: string
-  mediaType: string
-  seasonNumber: number | null
-  episodeNumber: number | null
-  timestamp: number
-  duration: number
-  completed: boolean
-  lastWatched: string
-}
+import {
+  aggregateWatchHistory,
+  type RawWatchHistoryItem,
+} from '@/lib/watch-history-aggregate'
 
 export default function ContinueWatchingPage() {
   const { data: session } = useSession()
-  const [watchHistory, setWatchHistory] = useState<WatchHistoryItem[]>([])
+  const [watchHistory, setWatchHistory] = useState<RawWatchHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,7 +28,7 @@ export default function ContinueWatchingPage() {
       const response = await fetch('/api/watch-history?mediaType=movies')
       if (response.ok) {
         const data = await response.json()
-        setWatchHistory(data)
+        setWatchHistory(Array.isArray(data) ? data : [])
       }
     } catch (error) {
       console.error('Error fetching watch history:', error)
@@ -47,11 +37,28 @@ export default function ContinueWatchingPage() {
     }
   }
 
-  const deleteFromHistory = async (id: string) => {
+  const aggregated = useMemo(
+    () => aggregateWatchHistory(watchHistory),
+    [watchHistory]
+  )
+  const incompleteHistory = useMemo(
+    () => aggregated.filter((item) => !item.completed),
+    [aggregated]
+  )
+  const completedHistory = useMemo(
+    () => aggregated.filter((item) => item.completed),
+    [aggregated]
+  )
+
+  const deleteFromHistory = async (
+    id: string,
+    isSeries: boolean
+  ) => {
     try {
-      const response = await fetch(`/api/watch-history/${id}`, {
-        method: 'DELETE'
-      })
+      const url = isSeries
+        ? `/api/watch-history/${id}?series=1`
+        : `/api/watch-history/${id}`
+      const response = await fetch(url, { method: 'DELETE' })
 
       if (response.ok) {
         toast.success('Removed from history')
@@ -62,20 +69,23 @@ export default function ContinueWatchingPage() {
     }
   }
 
-  const getProgressPercentage = (timestamp: number, duration: number) => {
-    if (!duration) return 0
-    return Math.min((timestamp / duration) * 100, 100)
-  }
-
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-    
+
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
     return `${minutes}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const watchHref = (item: (typeof aggregated)[number]) => {
+    if (item.mediaType === 'movie') return `/watch/movie/${item.tmdbId}`
+    if (item.mediaType === 'anime') {
+      return `/watch/anime/${item.tmdbId}/${item.episodeNumber || 1}`
+    }
+    return `/watch/tv/${item.tmdbId}/${item.seasonNumber || 1}/${item.episodeNumber || 1}`
   }
 
   if (!session) {
@@ -108,12 +118,10 @@ export default function ContinueWatchingPage() {
     )
   }
 
-  const incompleteHistory = watchHistory.filter(item => !item.completed)
-
   return (
     <div className="min-h-screen bg-black">
       <Navbar />
-      
+
       <div className="pt-24 px-8 md:px-16 max-w-7xl mx-auto">
         <div className="flex items-center gap-3 mb-8">
           <Clock className="w-8 h-8 text-red-500" />
@@ -137,13 +145,13 @@ export default function ContinueWatchingPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {incompleteHistory.map((item) => {
-              const progress = getProgressPercentage(item.timestamp, item.duration)
+              const progress = item.progressPercent
               const imageUrl = item.posterPath?.startsWith('http')
                 ? item.posterPath
                 : getImageUrl(item.posterPath, 'w500')
-              
+
               return (
-                <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden group">
+                  <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden group">
                   <div className="relative aspect-video">
                     <img
                       src={imageUrl}
@@ -152,20 +160,13 @@ export default function ContinueWatchingPage() {
                     />
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <Link
-                        href={
-                          item.mediaType === 'movie'
-                            ? `/watch/movie/${item.tmdbId}`
-                            : item.mediaType === 'anime'
-                              ? `/watch/anime/${item.tmdbId}/${item.episodeNumber || 1}`
-                              : `/watch/tv/${item.tmdbId}/${item.seasonNumber || 1}/${item.episodeNumber || 1}`
-                        }
+                        href={watchHref(item)}
                         className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
                       >
                         <Play className="w-8 h-8 text-white fill-white ml-1" />
                       </Link>
                     </div>
-                    
-                    {/* Progress bar */}
+
                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700">
                       <div
                         className="h-full bg-red-600 transition-all"
@@ -173,41 +174,47 @@ export default function ContinueWatchingPage() {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
                         <h3 className="text-white font-semibold mb-1">{item.title}</h3>
-                        {item.seasonNumber && item.episodeNumber && (
-                          <p className="text-gray-400 text-sm">
-                            S{item.seasonNumber} E{item.episodeNumber}
-                          </p>
-                        )}
+                        {item.isSeries &&
+                          item.seasonNumber != null &&
+                          item.episodeNumber != null && (
+                            <p className="text-gray-400 text-sm">
+                              {item.mediaType === 'tv'
+                                ? `S${item.seasonNumber} E${item.episodeNumber}`
+                                : `Episode ${item.episodeNumber}`}
+                            </p>
+                          )}
                       </div>
                       <button
-                        onClick={() => deleteFromHistory(item.id)}
+                        onClick={() => deleteFromHistory(item.id, item.isSeries)}
                         className="text-gray-400 hover:text-red-500 transition-colors"
                         title="Remove from history"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    
+
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-400">
-                        {formatTime(item.timestamp)} / {formatTime(item.duration)}
-                      </span>
+                      {item.isSeries ? (
+                        <span className="text-gray-400">
+                          {item.totalEpisodes
+                            ? `${item.completedEpisodes ?? 0} / ${item.totalEpisodes} episodes`
+                            : `${item.completedEpisodes ?? 0} episodes watched`}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">
+                          {formatTime(item.timestamp)} / {formatTime(item.duration)}
+                        </span>
+                      )}
                       <span className="text-gray-400">{Math.round(progress)}%</span>
                     </div>
-                    
+
                     <Link
-                      href={
-                        item.mediaType === 'movie'
-                          ? `/watch/movie/${item.tmdbId}`
-                          : item.mediaType === 'anime'
-                            ? `/watch/anime/${item.tmdbId}/${item.episodeNumber || 1}`
-                            : `/watch/tv/${item.tmdbId}/${item.seasonNumber || 1}/${item.episodeNumber || 1}`
-                      }
+                      href={watchHref(item)}
                       className="mt-3 block w-full bg-red-600 text-white text-center py-2 rounded hover:bg-red-700 transition-colors"
                     >
                       Continue Watching
@@ -219,17 +226,20 @@ export default function ContinueWatchingPage() {
           </div>
         )}
 
-        {watchHistory.length > incompleteHistory.length && (
+        {completedHistory.length > 0 && (
           <div className="mt-12">
             <h2 className="text-2xl font-bold text-white mb-6">Completed</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {watchHistory.filter(item => item.completed).map((item) => {
+              {completedHistory.map((item) => {
                 const imageUrl = item.posterPath?.startsWith('http')
                   ? item.posterPath
                   : getImageUrl(item.posterPath, 'w500')
-                
+
                 return (
-                  <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden opacity-60">
+                  <div
+                    key={item.id}
+                    className="bg-gray-900 rounded-lg overflow-hidden opacity-60"
+                  >
                     <div className="relative aspect-video">
                       <img
                         src={imageUrl}
@@ -240,12 +250,12 @@ export default function ContinueWatchingPage() {
                         Completed
                       </div>
                     </div>
-                    
+
                     <div className="p-4">
                       <h3 className="text-white font-semibold">{item.title}</h3>
-                      {item.seasonNumber && item.episodeNumber && (
+                      {item.isSeries && item.totalEpisodes != null && (
                         <p className="text-gray-400 text-sm">
-                          S{item.seasonNumber} E{item.episodeNumber}
+                          All {item.totalEpisodes} episodes
                         </p>
                       )}
                     </div>

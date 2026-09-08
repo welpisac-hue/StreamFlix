@@ -94,7 +94,7 @@ export default function WatchAnimePage() {
       {anime && (
         <WatchProgressTracker
           tmdbId={anime.id}
-          title={`${title} EP ${epNum}`}
+          title={title}
           posterPath={anime.coverImage}
           mediaType="anime"
           episodeNumber={epNum}
@@ -122,8 +122,15 @@ export default function WatchAnimePage() {
         <AnimePlayer
           anilistId={anime?.id ?? animeId}
           episode={epNum}
-          title={`${title} EP ${epNum}`}
+          title={title}
+          overview={anime.description}
+          posterPath={anime.coverImage}
           startAt={startAt}
+          nextHref={
+            epNum < totalEpisodes
+              ? `/watch/anime/${animeId}/${epNum + 1}`
+              : undefined
+          }
           onProgress={onProgress}
         />
 

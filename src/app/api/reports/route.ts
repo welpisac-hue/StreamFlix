@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
 
-    const limited = rateLimit(`report:${session?.user?.id || 'anonymous'}`, {
+    const limited = await rateLimit(`report:${session?.user?.id || 'anonymous'}`, {
       limit: 10,
       windowMs: 15 * 60 * 1000,
     })

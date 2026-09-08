@@ -12,6 +12,7 @@
     "postinstall": "prisma generate",
     "db:reset": "node prisma/wipe.js && prisma db push && npx tsx prisma/seed.ts",
     "db:seed": "npx tsx prisma/seed.ts",
+    "db:dedupe-history": "npx tsx prisma/dedupe-watch-history.ts",
     "preview": "npm run build:worker && opennextjs-cloudflare preview",
     "deploy": "npm run build:worker && opennextjs-cloudflare deploy",
     "upload": "npm run build:worker && opennextjs-cloudflare upload",

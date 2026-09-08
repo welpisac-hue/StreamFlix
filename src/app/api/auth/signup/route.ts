@@ -10,7 +10,7 @@ import { clientKey, rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
-    const limited = rateLimit(`signup:${clientKey(request)}`, {
+    const limited = await rateLimit(`signup:${clientKey(request)}`, {
       limit: 5,
       windowMs: 60 * 60 * 1000,
     })

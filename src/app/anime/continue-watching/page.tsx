@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Clock, Play, Trash2 } from 'lucide-react'
@@ -8,20 +8,10 @@ import toast from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
 import SiteFooter from '@/components/SiteFooter'
 import { getImageUrl } from '@/lib/tmdb/images'
-
-interface WatchHistoryItem {
-  id: string
-  tmdbId: number
-  title: string
-  posterPath: string | null
-  mediaType: string
-  seasonNumber: number | null
-  episodeNumber: number | null
-  timestamp: number
-  duration: number
-  completed: boolean
-  lastWatched: string
-}
+import {
+  aggregateWatchHistory,
+  type RawWatchHistoryItem,
+} from '@/lib/watch-history-aggregate'
 
 function resolvePoster(path: string | null | undefined): string {
   if (!path) return '/placeholder.svg'
@@ -29,14 +19,9 @@ function resolvePoster(path: string | null | undefined): string {
   return getImageUrl(path, 'w500')
 }
 
-function watchHref(item: WatchHistoryItem): string {
-  const ep = item.episodeNumber && item.episodeNumber > 0 ? item.episodeNumber : 1
-  return `/watch/anime/${item.tmdbId}/${ep}`
-}
-
 export default function AnimeContinueWatchingPage() {
   const { data: session } = useSession()
-  const [watchHistory, setWatchHistory] = useState<WatchHistoryItem[]>([])
+  const [watchHistory, setWatchHistory] = useState<RawWatchHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchWatchHistory = async () => {
@@ -58,9 +43,22 @@ export default function AnimeContinueWatchingPage() {
     else setLoading(false)
   }, [session])
 
+  const aggregated = useMemo(
+    () => aggregateWatchHistory(watchHistory),
+    [watchHistory]
+  )
+  const incompleteHistory = useMemo(
+    () => aggregated.filter((item) => !item.completed),
+    [aggregated]
+  )
+  const completedHistory = useMemo(
+    () => aggregated.filter((item) => item.completed),
+    [aggregated]
+  )
+
   const deleteFromHistory = async (id: string) => {
     try {
-      const response = await fetch(`/api/watch-history/${id}`, {
+      const response = await fetch(`/api/watch-history/${id}?series=1`, {
         method: 'DELETE',
       })
       if (response.ok) {
@@ -72,21 +70,9 @@ export default function AnimeContinueWatchingPage() {
     }
   }
 
-  const getProgressPercentage = (timestamp: number, duration: number) => {
-    if (!duration) return 0
-    return Math.min((timestamp / duration) * 100, 100)
-  }
-
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs
-        .toString()
-        .padStart(2, '0')}`
-    }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`
+  const watchHref = (item: (typeof aggregated)[number]) => {
+    const ep = item.episodeNumber && item.episodeNumber > 0 ? item.episodeNumber : 1
+    return `/watch/anime/${item.tmdbId}/${ep}`
   }
 
   if (!session) {
@@ -112,9 +98,6 @@ export default function AnimeContinueWatchingPage() {
       </div>
     )
   }
-
-  const incompleteHistory = watchHistory.filter((item) => !item.completed)
-  const completedHistory = watchHistory.filter((item) => item.completed)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -150,10 +133,7 @@ export default function AnimeContinueWatchingPage() {
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {incompleteHistory.map((item) => {
-              const progress = getProgressPercentage(
-                item.timestamp,
-                item.duration
-              )
+              const progress = item.progressPercent
               const imageUrl = resolvePoster(item.posterPath)
               const href = watchHref(item)
 
@@ -209,8 +189,9 @@ export default function AnimeContinueWatchingPage() {
 
                     <div className="mb-3 flex items-center justify-between text-sm text-zinc-400">
                       <span>
-                        {formatTime(item.timestamp)} /{' '}
-                        {formatTime(item.duration)}
+                        {item.totalEpisodes
+                          ? `${item.completedEpisodes ?? 0} / ${item.totalEpisodes} episodes`
+                          : `${item.completedEpisodes ?? 0} episodes watched`}
                       </span>
                       <span>{Math.round(progress)}%</span>
                     </div>
@@ -252,9 +233,9 @@ export default function AnimeContinueWatchingPage() {
                   </div>
                   <div className="p-4">
                     <h3 className="font-semibold text-white">{item.title}</h3>
-                    {item.episodeNumber != null && (
+                    {item.totalEpisodes != null && (
                       <p className="text-sm text-zinc-400">
-                        Episode {item.episodeNumber}
+                        All {item.totalEpisodes} episodes
                       </p>
                     )}
                   </div>

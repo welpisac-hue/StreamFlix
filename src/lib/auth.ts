@@ -63,7 +63,7 @@ export const authOptions: NextAuthOptions = {
 
         const username = normalizeUsername(credentials.username)
 
-        const limited = rateLimit(`auth:login:${username}`, {
+        const limited = await rateLimit(`auth:login:${username}`, {
           limit: 8,
           windowMs: 15 * 60 * 1000,
         })
@@ -123,7 +123,7 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/auth/signin',
   },
-  debug: process.env.NODE_ENV === 'development',
+  debug: process.env.NEXTAUTH_DEBUG === '1',
   session: {
     strategy: 'jwt',
     maxAge: 60 * 60 * 12,

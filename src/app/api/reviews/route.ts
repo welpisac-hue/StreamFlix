@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
+import { invalidateRecommendationCache } from '@/lib/recommendation-cache'
 
 const userSelect = {
   id: true,
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const limited = rateLimit(`reviews:post:${session.user.id}`, {
+    const limited = await rateLimit(`reviews:post:${session.user.id}`, {
       limit: 20,
       windowMs: 60 * 60 * 1000,
     })
@@ -114,6 +115,10 @@ export async function POST(request: Request) {
         user: { select: userSelect },
       },
     })
+
+    if (rating >= 8) {
+      await invalidateRecommendationCache(session.user.id)
+    }
 
     return NextResponse.json(review)
   } catch (error) {

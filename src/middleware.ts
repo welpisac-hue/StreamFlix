@@ -26,6 +26,7 @@ export default withAuth(
     const { pathname } = req.nextUrl
     const token = req.nextauth.token
     const adminSlug = getAdminSlug()
+    const isProd = process.env.NODE_ENV === 'production'
 
     // Banned accounts cannot use the app (JWT flag refreshed ~30s)
     if (token?.banned) {
@@ -39,10 +40,17 @@ export default withAuth(
       return applySecurityHeaders(NextResponse.redirect(signIn))
     }
 
-    // Admin UI is at /admin. Optional ADMIN_PATH slug is rewritten there in
-    // next.config — on OpenNext/Cloudflare the request pathname often becomes
-    // /admin after that rewrite, so we must NOT 404 /admin or the dashboard
-    // is unreachable. Non-admins are redirected home (no reveal).
+    // Production without ADMIN_PATH: block the default /admin UI so it isn't public.
+    // Set ADMIN_PATH + NEXT_PUBLIC_ADMIN_PATH on Vercel (same value).
+    if (
+      isProd &&
+      !adminSlug &&
+      (pathname === '/admin' || pathname.startsWith('/admin/'))
+    ) {
+      return applySecurityHeaders(new NextResponse(null, { status: 404 }))
+    }
+
+    // Admin UI is at /admin (or rewritten from ADMIN_PATH slug).
     const isAdminPage =
       pathname === '/admin' ||
       pathname.startsWith('/admin/') ||

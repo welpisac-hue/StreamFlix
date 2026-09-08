@@ -64,7 +64,7 @@ export default function WatchTVPage() {
       {show && (
         <WatchProgressTracker
           tmdbId={show.id}
-          title={`${show.name} S${seasonNumber}E${episodeNumber}`}
+          title={show.name}
           posterPath={show.poster_path}
           mediaType="tv"
           seasonNumber={parseInt(seasonNumber, 10)}
@@ -100,7 +100,10 @@ export default function WatchTVPage() {
           tmdbId={tvId}
           season={seasonNumber}
           episode={episodeNumber}
-          title={`${show?.name || 'Show'} S${seasonNumber}E${episodeNumber}`}
+          title={show?.name || 'Show'}
+          episodeTitle={currentEpisode?.name}
+          overview={currentEpisode?.overview || show?.overview}
+          posterPath={show?.poster_path}
           startAt={startAt}
           nextHref={
             hasNextEpisode

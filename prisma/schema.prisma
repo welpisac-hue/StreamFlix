@@ -88,14 +88,16 @@ model VerificationToken {
 }
 
 model UserPreferences {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
+  id                  String    @id @default(cuid())
+  userId              String    @unique
   favoriteGenres      String[]
   preferredMoods      String[]
   watchHistory        String[]
-  onboardingCompleted Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  onboardingCompleted Boolean   @default(true)
+  cachedRecs          Json?
+  cachedRecsAt        DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -107,15 +109,20 @@ model WatchHistory {
   title         String
   posterPath    String?
   mediaType     String
-  seasonNumber  Int?
-  episodeNumber Int?
+  // 0 = movie / anime-without-season. Never null — required for @@unique.
+  seasonNumber  Int      @default(0)
+  episodeNumber Int      @default(0)
   timestamp     Int      @default(0)
   duration      Int      @default(0)
   completed     Boolean  @default(false)
-  lastWatched   DateTime @default(now())
+  genreIds             Int[]    @default([])
+  totalEpisodes        Int?
+  seasonEpisodeCounts  Json? // [{ season: number, episodes: number }]
+  lastWatched          DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, tmdbId, mediaType, seasonNumber, episodeNumber])
   @@index([userId])
   @@index([tmdbId])
 }
@@ -197,6 +204,13 @@ model PageView {
   @@index([createdAt])
   @@index([userId])
   @@index([path])
+}
+
+/** Durable fixed-window rate limits (Vercel multi-instance safe via Postgres). */
+model RateLimitBucket {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
 }
 
 model SiteSettings {

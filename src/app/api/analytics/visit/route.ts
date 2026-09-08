@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -10,11 +11,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const limited = await rateLimit(`visit:${session.user.id}`, {
+      limit: 20,
+      windowMs: 60_000,
+    })
+    if (!limited.ok) {
+      return NextResponse.json({ ok: true, throttled: true })
+    }
+
     const body = await request.json().catch(() => ({}))
     const path =
       typeof body.path === 'string' && body.path.startsWith('/')
         ? body.path.slice(0, 500)
         : '/'
+
+    // Skip tracking watch playback pages — high churn, low analytics value
+    if (path.startsWith('/watch')) {
+      return NextResponse.json({ ok: true, skipped: true })
+    }
 
     await prisma.pageView.create({
       data: {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Info, Play, Star, X } from 'lucide-react'
 import Link from 'next/link'
@@ -9,6 +9,7 @@ import StartWatchPartyButton from './StartWatchPartyButton'
 import AddToPlaylistButton from './AddToPlaylistButton'
 import { getImageUrl } from '@/lib/tmdb/images'
 import { playSound } from '@/lib/sound'
+import { pickYoutubeTrailerKey } from '@/lib/home-catalog'
 
 interface QuickPreviewModalProps {
   tmdbId: number
@@ -30,14 +31,28 @@ export default function QuickPreviewModal({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [overview, setOverview] = useState<string | null>(null)
+  const [backdropPath, setBackdropPath] = useState<string | null>(null)
+  const [trailerKey, setTrailerKey] = useState<string | null>(null)
+  const [showTrailer, setShowTrailer] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setShowTrailer(false)
+      return
+    }
+    if (!trailerKey) return
+    const t = window.setTimeout(() => setShowTrailer(true), 5000)
+    return () => window.clearTimeout(t)
+  }, [open, trailerKey])
 
   const handleOpen = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     playSound.hover()
     setOpen(true)
-    if (overview) return
+    setShowTrailer(false)
+    if (overview && (trailerKey || mediaType === 'anime')) return
 
     setLoading(true)
     try {
@@ -56,6 +71,15 @@ export default function QuickPreviewModal({
           ? String(rawOverview).replace(/<[^>]*>/g, '')
           : 'No synopsis available.'
         setOverview(cleanText)
+
+        if (data.backdrop_path) setBackdropPath(data.backdrop_path)
+        else if (data.bannerImage) setBackdropPath(data.bannerImage)
+
+        if (mediaType === 'anime') {
+          setTrailerKey(data.trailerYoutubeId || null)
+        } else {
+          setTrailerKey(pickYoutubeTrailerKey(data.videos))
+        }
       }
     } catch {
       setOverview('Failed to load synopsis.')
@@ -71,12 +95,22 @@ export default function QuickPreviewModal({
         ? `/anime/${tmdbId}`
         : `/tv/${tmdbId}`
 
+  const posterSrc = posterPath?.startsWith('http')
+    ? posterPath
+    : getImageUrl(posterPath, 'w500')
+
+  const backdropSrc = backdropPath
+    ? backdropPath.startsWith('http')
+      ? backdropPath
+      : getImageUrl(backdropPath, 'w780')
+    : null
+
   return (
     <>
       <button
         type="button"
         onClick={handleOpen}
-        className="rounded-full bg-black/60 p-2 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 hover:bg-black/90 hover:scale-110"
+        className="rounded-full bg-black/60 p-2 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 hover:scale-110 hover:bg-black/90"
         title="Quick preview"
       >
         <Info className="h-4 w-4" />
@@ -88,32 +122,58 @@ export default function QuickPreviewModal({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-1.5 text-white backdrop-blur hover:bg-black/90"
+              className="absolute right-3 top-3 z-20 rounded-full bg-black/60 p-1.5 text-white backdrop-blur hover:bg-black/90"
             >
               <X className="h-4 w-4" />
             </button>
 
-            {/* Poster Header */}
-            <div className="relative aspect-video w-full bg-zinc-900">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={
-                  posterPath?.startsWith('http')
-                    ? posterPath
-                    : getImageUrl(posterPath, 'w500')
-                }
-                alt={title}
-                className="h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-              <div className="absolute bottom-4 left-4 right-4">
-                <span className="rounded bg-[var(--primary)] px-2 py-0.5 text-[10px] uppercase font-bold text-white">
+            <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
+              {/* Backdrop fits 16:9; poster uses contain so it isn't cropped */}
+              {backdropSrc ? (
+                <img
+                  src={backdropSrc}
+                  alt=""
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+                    showTrailer && trailerKey ? 'opacity-0' : 'opacity-100'
+                  }`}
+                />
+              ) : (
+                <div
+                  className={`absolute inset-0 flex items-center justify-center bg-zinc-950 transition-opacity duration-700 ${
+                    showTrailer && trailerKey ? 'opacity-0' : 'opacity-100'
+                  }`}
+                >
+                  <img
+                    src={posterSrc}
+                    alt={title}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              )}
+
+              {trailerKey && (
+                <iframe
+                  key={trailerKey}
+                  src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&loop=1&playlist=${trailerKey}&modestbranding=1&playsinline=1`}
+                  className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-700 ${
+                    showTrailer ? 'opacity-100' : 'pointer-events-none opacity-0'
+                  }`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  title={`${title} trailer`}
+                />
+              )}
+
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent" />
+              <div className="absolute bottom-4 left-4 right-4 z-10">
+                <span className="rounded bg-[var(--primary)] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                   {mediaType}
                 </span>
-                <h3 className="mt-1 font-display text-2xl tracking-wide text-white">{title}</h3>
+                <h3 className="mt-1 font-display text-2xl tracking-wide text-white">
+                  {title}
+                </h3>
                 <div className="mt-1 flex items-center gap-3 text-xs text-zinc-300">
                   {rating != null && (
-                    <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                    <span className="flex items-center gap-1 font-semibold text-amber-400">
                       <Star className="h-3.5 w-3.5 fill-amber-400" />
                       {rating.toFixed(1)}
                     </span>
@@ -123,9 +183,8 @@ export default function QuickPreviewModal({
               </div>
             </div>
 
-            {/* Content Body */}
-            <div className="p-5 space-y-4">
-              <p className="text-xs leading-relaxed text-zinc-300 line-clamp-4">
+            <div className="space-y-4 p-5">
+              <p className="line-clamp-4 text-xs leading-relaxed text-zinc-300">
                 {loading ? 'Loading details…' : overview}
               </p>
 
@@ -143,7 +202,7 @@ export default function QuickPreviewModal({
                     )
                     setOpen(false)
                   }}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-2.5 text-xs font-bold text-white shadow-lg hover:brightness-110 transition"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-2.5 text-xs font-bold text-white shadow-lg transition hover:brightness-110"
                 >
                   <Play className="h-4 w-4 fill-white" />
                   Play Now

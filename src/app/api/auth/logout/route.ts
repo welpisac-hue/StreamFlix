@@ -11,7 +11,7 @@ export async function POST() {
     return NextResponse.json({ ok: true })
   }
 
-  const limited = rateLimit(`logout:${session.user.id}`, {
+  const limited = await rateLimit(`logout:${session.user.id}`, {
     limit: 20,
     windowMs: 60_000,
   })

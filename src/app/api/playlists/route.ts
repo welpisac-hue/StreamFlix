@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const limited = rateLimit(`playlist:create:${session.user.id}`, {
+    const limited = await rateLimit(`playlist:create:${session.user.id}`, {
       limit: 15,
       windowMs: 60 * 60 * 1000,
     })
