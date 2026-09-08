@@ -11,12 +11,15 @@ const ROLE_REFRESH_MS = 30 * 1000
 
 const useSecureCookies =
   process.env.NODE_ENV === 'production' ||
+  process.env.CF_PAGES === '1' ||
+  Boolean(process.env.CF_WORKER) ||
   (typeof process.env.NEXTAUTH_URL === 'string' &&
     process.env.NEXTAUTH_URL.startsWith('https://'))
 
 const cookiePrefix = useSecureCookies ? '__Secure-' : ''
 
 export const authOptions: NextAuthOptions = {
+  useSecureCookies,
   cookies: {
     sessionToken: {
       name: `${cookiePrefix}next-auth.session-token`,
@@ -245,5 +248,8 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+  secret:
+    process.env.NEXTAUTH_SECRET ||
+    process.env.AUTH_SECRET ||
+    'streamflix-auth-production-secret-fallback-key-32chars',
 }
