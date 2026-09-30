@@ -4,6 +4,18 @@
   "startCommand": "docker compose -f docker-compose.base44.yml up -d",
   "secrets": [
     {
+      "name": "DATABASE_URL",
+      "description": "Supabase Postgres transaction pooler connection string (port 6543). From Supabase Dashboard → Project Settings → Database → Connection string (URI). Used by the app at runtime.",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": false
+    },
+    {
+      "name": "DIRECT_URL",
+      "description": "Supabase Postgres direct connection string (port 5432). From Supabase Dashboard → Project Settings → Database → Connection string (URI). Used by Prisma CLI commands.",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": false
+    },
+    {
       "name": "TMDB_API_KEY",
       "description": "TMDB (The Movie Database) API key from https://www.themoviedb.org/settings/api. Accepts the v3 API Key (32-char) or v4 Read Access Token (JWT starting with eyJ). Required for movie/TV content to load.",
       "requiredAtBoot": false,

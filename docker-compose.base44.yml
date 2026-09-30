@@ -27,7 +27,12 @@ services:
     restart: on-failure
 
   migrate:
-    # One-shot: install deps, push the Prisma schema, seed. Exits 0 on success.
+    # One-shot: install deps + generate the Prisma client. Exits 0 on success.
+    # NOTE: intentionally does NOT run `prisma db push` or seed — the preview may
+    # point at a real (production) Supabase database, and those would alter/wipe it.
+    # To initialize a LOCAL database instead, run manually:
+    #   docker compose -f docker-compose.base44.yml run --rm migrate sh -c \
+    #     "npx prisma db push --accept-data-loss && npx tsx prisma/seed.ts"
     image: node:22
     working_dir: /app
     volumes:
@@ -36,17 +41,12 @@ services:
     env_file:
       - ./.env.base44-defaults
       - /run/base44/app.env
-    depends_on:
-      db:
-        condition: service_healthy
     command:
       - sh
       - -ec
       - |
         npm ci
         npx prisma generate
-        npx prisma db push --accept-data-loss
-        npx tsx prisma/seed.ts
 
   web:
     image: node:22
