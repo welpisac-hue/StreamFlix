@@ -47,6 +47,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   compress: true,
+  // Base44 preview origin — Next blocks dev assets/HMR from unallowed origins.
+  allowedDevOrigins: process.env.BASE44_PUBLIC_HOST_SUFFIX
+    ? ['3000-' + process.env.BASE44_PUBLIC_HOST_SUFFIX]
+    : [],
   serverExternalPackages: [
     '@prisma/client',
     '.prisma/client',

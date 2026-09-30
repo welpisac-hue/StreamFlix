@@ -1,0 +1,12 @@
+# PostgreSQL with a baked-in self-signed SSL certificate.
+# The app's Prisma pg Pool hardcodes `ssl: { rejectUnauthorized: false }`,
+# so the database must accept SSL connections. The cert is generated at
+# build time and owned by the postgres user so the server can read it.
+FROM postgres:16
+
+RUN openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout /var/lib/postgresql/server.key \
+      -out /var/lib/postgresql/server.crt \
+      -days 3650 -subj '/CN=db' \
+    && chown postgres:postgres /var/lib/postgresql/server.key /var/lib/postgresql/server.crt \
+    && chmod 600 /var/lib/postgresql/server.key

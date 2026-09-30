@@ -252,3 +252,33 @@ Set `NODE_ENV=development` for detailed error messages and NextAuth debug mode.
 
 ## Contact
 For support or questions: Real5wagger5oup@Gmail.com
+
+## Base44 Dev Environment
+
+This repo runs under Base44 via `docker-compose.base44.yml` (not the repo's own
+Cloudflare/Vercel deploy config). It runs the Next.js dev server from the cloned
+source with live reload, plus a local PostgreSQL.
+
+### Running
+```bash
+docker compose -f docker-compose.base44.yml up -d --build
+```
+- `db` — PostgreSQL 16 with a baked-in self-signed SSL cert (see `docker/Dockerfile.pg`).
+  SSL is required because `src/lib/prisma.ts` hardcodes `ssl: { rejectUnauthorized: false }`
+  on the pg Pool, so a plain non-SSL Postgres would be rejected.
+- `migrate` — one-shot: `npm ci` → `prisma generate` → `prisma db push` → seed. Installs
+  deps into a shared `node_modules` volume so the `web` service reuses them.
+- `web` — `next dev -H 0.0.0.0 -p 3000` (Turbopack). Port 3000. Depends on `migrate` finishing.
+
+### Environment
+- `.env.base44-defaults` holds local-only placeholders (DB URL, NEXTAUTH_URL, admin slug).
+- Real secrets (`TMDB_API_KEY`, `NEXTAUTH_SECRET`) come from `/run/base44/app.env` (loaded
+  last, so they override the defaults). See `.base44/environment.json`.
+- `BASE44_PUBLIC_HOST_SUFFIX` is passed into `web` so `next.config.ts` `allowedDevOrigins`
+  allows the preview origin for dev assets/HMR.
+
+### Notes
+- The app is invite-only: the root redirects unauthenticated users to `/auth/signin`.
+  The seed creates admin invite code `WILLCHANGE` (1 use, grants ADMIN).
+- To re-run migrations after a schema change: `docker compose -f docker-compose.base44.yml
+  up -d --force-recreate migrate` (this re-seeds and wipes app data).
