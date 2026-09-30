@@ -1,6 +1,27 @@
 /** Client-side playback preferences (localStorage). */
 
+import type { ServerProvider } from '@/lib/embeds'
+
+const SERVER_KEY = 'sf-server-provider'
 const INFO_KEY = 'sf-player-info'
+
+export function getServerProvider(): ServerProvider {
+  if (typeof window === 'undefined') return 'vidcore'
+  try {
+    const raw = localStorage.getItem(SERVER_KEY)
+    return raw === 'cinesrc' ? 'cinesrc' : 'vidcore'
+  } catch {
+    return 'vidcore'
+  }
+}
+
+export function setServerProvider(provider: ServerProvider) {
+  try {
+    localStorage.setItem(SERVER_KEY, provider)
+  } catch {
+    // ignore
+  }
+}
 const STILL_ENABLED_KEY = 'sf-still-watching-enabled'
 const STILL_EPISODES_KEY = 'sf-still-watching-episodes'
 const BINGE_PREFIX = 'sf-binge:'

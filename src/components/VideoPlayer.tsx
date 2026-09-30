@@ -13,11 +13,20 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import { getMovieEmbedUrl, getTVEmbedUrl } from '@/lib/embeds'
+import {
+  getMovieEmbedUrl,
+  getTVEmbedUrl,
+  normalizePlayerEvent,
+  sendPlayerCommand,
+  type ServerProvider,
+} from '@/lib/embeds'
+import ServerSelector from './ServerSelector'
 import StreamReportButton from './StreamReportButton'
 import { playSound, isSoundEnabled, setSoundEnabled } from '@/lib/sound'
 import {
   getPlayerSettings,
+  getServerProvider,
+  setServerProvider,
   setInfoEnabled,
   setStillWatchingEnabled,
   setStillWatchingEpisodes,
@@ -56,6 +65,7 @@ const IDLE_MS = 20_000
 
 export default function VideoPlayer(props: VideoPlayerProps) {
   const router = useRouter()
+  const [provider, setProvider] = useState<ServerProvider>(() => getServerProvider())
   const [theaterMode, setTheaterMode] = useState(false)
   const [ambientGlow, setAmbientGlow] = useState(true)
   const [soundActive, setSoundActive] = useState(true)
@@ -85,14 +95,12 @@ export default function VideoPlayer(props: VideoPlayerProps) {
   startAtRef.current = props.startAt || 0
   const [embedUrl, setEmbedUrl] = useState<string | null>(null)
   const urlBuiltRef = useRef(false)
-  /** Movies: one-shot resume seek (URL progress= locks Vidking movie scrubber) */
-  const movieResumeSeekDoneRef = useRef(false)
 
   const seasonKey =
     props.mediaType === 'movie' ? 0 : Number((props as TVProps).season || 1)
   const episodeKey =
     props.mediaType === 'movie' ? 0 : Number((props as TVProps).episode || 1)
-  const mediaKey = `${props.mediaType}-${props.tmdbId}-${seasonKey}-${episodeKey}`
+  const mediaKey = `${props.mediaType}-${props.tmdbId}-${seasonKey}-${episodeKey}-${provider}`
 
   useEffect(() => {
     setSoundActive(isSoundEnabled())
@@ -109,18 +117,16 @@ export default function VideoPlayer(props: VideoPlayerProps) {
 
   const buildEmbedUrl = useCallback(
     (progressSeconds: number) => {
-      // Movies: never bake progress into the iframe URL — Vidking's movie player
-      // often locks/scrubs-fight when ?progress= is set. Resume via postMessage.
+      const startAt = progressSeconds > 15 ? Math.floor(progressSeconds) : undefined
       if (props.mediaType === 'movie') {
-        return getMovieEmbedUrl(props.tmdbId)
+        return getMovieEmbedUrl(props.tmdbId, provider, { startAt })
       }
-      const progress =
-        progressSeconds > 15 ? Math.floor(progressSeconds) : undefined
       return getTVEmbedUrl(
         props.tmdbId,
         (props as TVProps).season || 1,
         (props as TVProps).episode || 1,
-        { progress }
+        provider,
+        { startAt }
       )
     },
     // mediaKey fields only — must not rebuild when startAt changes
@@ -128,33 +134,15 @@ export default function VideoPlayer(props: VideoPlayerProps) {
     [mediaKey]
   )
 
-  const seekMovieResume = useCallback((seconds: number) => {
-    if (props.mediaType !== 'movie') return
-    if (movieResumeSeekDoneRef.current) return
-    if (seconds <= 15) return
-    movieResumeSeekDoneRef.current = true
-    try {
-      iframeRef.current?.contentWindow?.postMessage(
-        {
-          type: 'PLAYER_COMMAND',
-          data: { command: 'seek', time: Math.floor(seconds) },
-        },
-        '*'
-      )
-    } catch {
-      // ignore
-    }
-  }, [props.mediaType])
-
   /**
-   * Mount embed once per title.
-   * Movies: immediate clean URL (no progress=).
-   * TV: short settle wait, then URL with progress=.
+   * Mount embed once per title+provider.
+   * Short settle wait for resume to arrive, then URL with startAt.
+   * Both providers support start-at-time via URL params, so no
+   * postMessage seek hack is needed.
    */
   useEffect(() => {
     setEmbedUrl(null)
     urlBuiltRef.current = false
-    movieResumeSeekDoneRef.current = false
     mountAtRef.current = Date.now()
     nearEndSinceRef.current = null
     endHandledRef.current = false
@@ -167,14 +155,6 @@ export default function VideoPlayer(props: VideoPlayerProps) {
       setEmbedUrl(buildEmbedUrl(startAtRef.current))
     }
 
-    if (props.mediaType === 'movie') {
-      // Movies resume via postMessage after play — no need to delay mount.
-      commit()
-      return () => {
-        cancelled = true
-      }
-    }
-
     const minTimer = window.setTimeout(() => {
       if (startAtRef.current > 15) commit()
     }, 400)
@@ -185,17 +165,16 @@ export default function VideoPlayer(props: VideoPlayerProps) {
       window.clearTimeout(minTimer)
       window.clearTimeout(maxTimer)
     }
-  }, [mediaKey, buildEmbedUrl, props.mediaType])
+  }, [mediaKey, buildEmbedUrl])
 
-  // TV only: if resume arrives after min window but before commit, mount once.
+  // If resume arrives after min window but before commit, mount once.
   useEffect(() => {
-    if (props.mediaType === 'movie') return
     const seconds = Math.floor(props.startAt || 0)
     if (seconds <= 15 || urlBuiltRef.current) return
     if (Date.now() - mountAtRef.current < 400) return
     urlBuiltRef.current = true
     setEmbedUrl(buildEmbedUrl(seconds))
-  }, [props.startAt, buildEmbedUrl, props.mediaType])
+  }, [props.startAt, buildEmbedUrl])
 
   // Fetch intro info for TV shows only
   useEffect(() => {
@@ -287,14 +266,7 @@ export default function VideoPlayer(props: VideoPlayerProps) {
     setIntroVisible(false)
     if (introTimerRef.current) clearTimeout(introTimerRef.current)
     const seekTo = (currentTimeRef.current || 0) + skipIntroDuration
-    try {
-      iframeRef.current?.contentWindow?.postMessage(
-        { type: 'PLAYER_COMMAND', data: { command: 'seek', time: seekTo } },
-        '*'
-      )
-    } catch {
-      // ignore
-    }
+    sendPlayerCommand(iframeRef.current, provider, 'seek', seekTo)
   }
 
   const triggerNextEpisodeFlow = useCallback(() => {
@@ -306,20 +278,13 @@ export default function VideoPlayer(props: VideoPlayerProps) {
       const binge = incrementBingeCount(props.mediaType, props.tmdbId)
       if (binge >= settings.stillWatchingEpisodes) {
         setStillWatchingPrompt(true)
-        try {
-          iframeRef.current?.contentWindow?.postMessage(
-            { type: 'PLAYER_COMMAND', data: { command: 'pause' } },
-            '*'
-          )
-        } catch {
-          // ignore
-        }
+        sendPlayerCommand(iframeRef.current, provider, 'pause')
         return
       }
     }
 
     setAutoPlayCountdown(5)
-  }, [props.nextHref, props.mediaType, props.tmdbId, settings])
+  }, [props.nextHref, props.mediaType, props.tmdbId, settings, provider])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -340,45 +305,22 @@ export default function VideoPlayer(props: VideoPlayerProps) {
           return
         }
       }
-      if (!data || data.type !== 'PLAYER_EVENT') return
-      const payload = data.data
-      if (!payload) return
 
-      if (typeof payload.currentTime === 'number') {
-        currentTimeRef.current = payload.currentTime
+      const playerEvent = normalizePlayerEvent(data, provider)
+      if (!playerEvent) return
+
+      const { event: eventName, currentTime, duration, paused } = playerEvent
+
+      if (typeof currentTime === 'number') {
+        currentTimeRef.current = currentTime
       }
 
-      if (payload.event === 'pause' || payload.paused === true) {
+      if (eventName === 'pause' || paused === true) {
         setIsPaused(true)
       }
-      if (payload.event === 'play' || payload.paused === false) {
+      if (eventName === 'play' || paused === false) {
         setIsPaused(false)
         dismissIdleInfo()
-      }
-
-      // Movie resume: seek once after the player is actually alive.
-      // Skipping ?progress= in the URL avoids Vidking's movie scrubber lock.
-      if (
-        props.mediaType === 'movie' &&
-        !movieResumeSeekDoneRef.current &&
-        startAtRef.current > 15
-      ) {
-        const eventName = payload.event || ''
-        const ready =
-          eventName === 'play' ||
-          eventName === 'timeupdate' ||
-          eventName === 'loaded' ||
-          eventName === 'ready'
-        if (ready) {
-          const at =
-            typeof payload.currentTime === 'number' ? payload.currentTime : 0
-          // Already near the resume point (or user scrubbed) — don't yank them.
-          if (at < startAtRef.current - 20) {
-            seekMovieResume(startAtRef.current)
-          } else {
-            movieResumeSeekDoneRef.current = true
-          }
-        }
       }
 
       if (!props.nextHref || endHandledRef.current) return
@@ -390,13 +332,13 @@ export default function VideoPlayer(props: VideoPlayerProps) {
         return
       }
 
-      const explicitEnd = payload.event === 'ended'
+      const explicitEnd = eventName === 'ended'
       const nearEnd =
-        typeof payload.currentTime === 'number' &&
-        typeof payload.duration === 'number' &&
-        payload.duration > 60 &&
-        payload.currentTime > 60 &&
-        payload.currentTime >= payload.duration - 5
+        typeof currentTime === 'number' &&
+        typeof duration === 'number' &&
+        duration > 60 &&
+        currentTime > 60 &&
+        currentTime >= duration - 5
 
       if (explicitEnd) {
         triggerNextEpisodeFlow()
@@ -420,33 +362,10 @@ export default function VideoPlayer(props: VideoPlayerProps) {
   }, [
     props.nextHref,
     props.mediaType,
+    provider,
     triggerNextEpisodeFlow,
     dismissIdleInfo,
-    seekMovieResume,
   ])
-
-  // Late movie resume (remote arrived after mount): one seek if still near start.
-  useEffect(() => {
-    if (props.mediaType !== 'movie') return
-    const seconds = Math.floor(props.startAt || 0)
-    if (seconds <= 15 || movieResumeSeekDoneRef.current) return
-    if (Date.now() - mountAtRef.current > 8_000) return
-
-    const t = window.setTimeout(() => {
-      if (movieResumeSeekDoneRef.current) return
-      const at = currentTimeRef.current
-      if (at >= seconds - 20) {
-        movieResumeSeekDoneRef.current = true
-        return
-      }
-      // Only yank if playback clearly started near zero (missed the play-handler race).
-      if (at > 2 && at < 45) {
-        seekMovieResume(seconds)
-      }
-    }, 1200)
-
-    return () => window.clearTimeout(t)
-  }, [props.startAt, props.mediaType, seekMovieResume])
 
   useEffect(() => {
     if (autoPlayCountdown === null) return
@@ -492,6 +411,11 @@ export default function VideoPlayer(props: VideoPlayerProps) {
       setShowInfoOverlay(false)
       setIdleInfo(false)
     }
+  }
+
+  const handleProviderChange = (p: ServerProvider) => {
+    setProvider(p)
+    setServerProvider(p)
   }
 
   const infoVisible =
@@ -580,6 +504,8 @@ export default function VideoPlayer(props: VideoPlayerProps) {
               <VolumeX className="h-3.5 w-3.5 text-zinc-500" />
             )}
           </button>
+
+          <ServerSelector provider={provider} onChange={handleProviderChange} />
 
           {(props.mediaType === 'tv' || props.mediaType === 'anime') && (
             <div className="relative">

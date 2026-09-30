@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
+import { parseAnyPlayerEvent } from '@/lib/embeds'
 
 interface WatchProgressTrackerProps {
   tmdbId: number
@@ -36,16 +37,14 @@ function parsePlayerMessage(raw: unknown): {
   currentTime?: number
   duration?: number
 } | null {
-  let data: any = raw
   if (typeof raw === 'string') {
     try {
-      data = JSON.parse(raw)
+      raw = JSON.parse(raw)
     } catch {
       return null
     }
   }
-  if (!data || data.type !== 'PLAYER_EVENT') return null
-  return data.data || null
+  return parseAnyPlayerEvent(raw)
 }
 
 export default function WatchProgressTracker({

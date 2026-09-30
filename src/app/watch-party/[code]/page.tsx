@@ -11,7 +11,14 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
-import { getMovieEmbedUrl, getTVEmbedUrl } from '@/lib/embeds'
+import ServerSelector from '@/components/ServerSelector'
+import {
+  getMovieEmbedUrl,
+  getTVEmbedUrl,
+  normalizePlayerEvent,
+  sendPlayerCommand,
+  type ServerProvider,
+} from '@/lib/embeds'
 import { playSound } from '@/lib/sound'
 
 type PartyMessage = {
@@ -38,6 +45,7 @@ type PartyRoom = {
   mutedUserIds: string[]
   maxUsers: number | null
   viewerCount?: number
+  provider: string
   host: { id: string; username: string }
   messages: PartyMessage[]
 }
@@ -52,13 +60,13 @@ function formatTime(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-/** Build the vidsrc embed URL for the current room state */
-function buildEmbedUrl(room: PartyRoom, startAt: number): string {
-  const progress = startAt > 15 ? Math.floor(startAt) : undefined
+/** Build the embed URL for the current room state */
+function buildEmbedUrl(room: PartyRoom, startAt: number, provider: ServerProvider): string {
+  const startAtVal = startAt > 15 ? Math.floor(startAt) : undefined
   if (room.mediaType === 'movie') {
-    return getMovieEmbedUrl(room.tmdbId, { progress })
+    return getMovieEmbedUrl(room.tmdbId, provider, { startAt: startAtVal })
   }
-  return getTVEmbedUrl(room.tmdbId, room.seasonNumber ?? 1, room.episodeNumber ?? 1, { progress })
+  return getTVEmbedUrl(room.tmdbId, room.seasonNumber ?? 1, room.episodeNumber ?? 1, provider, { startAt: startAtVal })
 }
 
 export default function WatchPartyPage({
@@ -80,13 +88,18 @@ export default function WatchPartyPage({
   const [livePos, setLivePos] = useState<number>(0)
   const [countdownSecs, setCountdownSecs] = useState<number | null>(null)
 
-  // Sync state — track iframe playback position & time loaded to prevent stuttering reloads
+  // Embed state
   const [embedUrl, setEmbedUrl] = useState<string | null>(null)
   const [embedKey, setEmbedKey] = useState(0)
+  const [provider, setProvider] = useState<ServerProvider>('vidcore')
+
+  // Refs for sync
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const loadedPosRef = useRef<number>(-1)
   const loadedAtMsRef = useRef<number>(0)
   const lastSyncedPlayingRef = useRef<boolean | null>(null)
-
+  const loadedMediaRef = useRef<string>('')
+  const hostCurrentTimeRef = useRef<number>(0)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const fetchRoom = useCallback(async () => {
@@ -115,6 +128,30 @@ export default function WatchPartyPage({
   }, [fetchRoom])
 
   const isHost = session?.user?.id === room?.host.id
+
+  // ── Host sync: send playback state to server ──────────────────────────────
+  const hostSync = useCallback(async (isPlaying: boolean, currentTime?: number) => {
+    if (hostAction) return
+    setHostAction(true)
+    try {
+      await fetch('/api/watch-party', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: resolvedParams.code,
+          action: 'sync',
+          isPlaying,
+          ...(currentTime !== undefined ? { currentTime } : {}),
+        }),
+      })
+      await fetchRoom()
+    } catch { toast.error('Sync failed') }
+    finally { setHostAction(false) }
+  }, [hostAction, resolvedParams.code, fetchRoom])
+
+  // Keep a ref to hostSync so the message listener doesn't need it in deps
+  const hostSyncRef = useRef(hostSync)
+  hostSyncRef.current = hostSync
 
   // Local 1-second ticker for live position and countdown
   useEffect(() => {
@@ -153,47 +190,107 @@ export default function WatchPartyPage({
     return () => clearInterval(timer)
   }, [room, isHost])
 
-  // ── Sync iframe to host state (Smooth — 5s Delay for Guests, No Constant Reloading) ──
+  // ── Load / reload iframe when media, provider, or schedule changes ────────
   useEffect(() => {
     if (!room) return
 
     const isBeforeSchedule = room.scheduledStartTime && new Date(room.scheduledStartTime).getTime() > Date.now()
     if (isBeforeSchedule) {
-      // Don't render video iframe yet during countdown
+      setEmbedUrl(null)
+      loadedMediaRef.current = ''
       return
     }
 
-    // 5-second buffer delay for non-host viewers for smooth buffering
-    const targetServerPos = isHost ? room.currentTime : Math.max(0, room.currentTime - 5)
-    const playingChanged = room.isPlaying !== lastSyncedPlayingRef.current
+    const roomProvider = (room.provider === 'cinesrc' ? 'cinesrc' : 'vidcore') as ServerProvider
+    if (roomProvider !== provider) setProvider(roomProvider)
 
-    // Estimate what the iframe should currently be playing naturally
-    const now = Date.now()
-    let estimatedIframePos = loadedPosRef.current
-    if (lastSyncedPlayingRef.current && loadedAtMsRef.current > 0) {
-      estimatedIframePos += (now - loadedAtMsRef.current) / 1000
-    }
+    const mediaId = `${room.tmdbId}-${room.mediaType}-${room.seasonNumber ?? 0}-${room.episodeNumber ?? 0}-${roomProvider}`
+    if (loadedMediaRef.current === mediaId) return // already loaded
 
-    const timeDrift = Math.abs(targetServerPos - estimatedIframePos)
+    loadedMediaRef.current = mediaId
+    const startPos = isHost ? 0 : Math.max(0, room.currentTime - 5)
+    const url = buildEmbedUrl(room, startPos, roomProvider)
+    setEmbedUrl(url)
+    setEmbedKey((k) => k + 1)
+    loadedPosRef.current = startPos
+    loadedAtMsRef.current = Date.now()
+    lastSyncedPlayingRef.current = room.isPlaying
+  }, [room, isHost, provider])
 
-    // Reload iframe ONLY IF:
-    // 1. Initial load (embedUrl is null)
-    // 2. Play/Pause state changed
-    // 3. Host did a major manual seek (> 30s drift)
-    const shouldReload =
-      embedUrl === null ||
-      playingChanged ||
-      timeDrift > 30
+  // ── Guest sync: sync guest playback via postMessage (no iframe reload) ────
+  useEffect(() => {
+    if (!room || isHost || !embedUrl) return
 
-    if (shouldReload) {
-      const url = buildEmbedUrl(room, targetServerPos)
-      setEmbedUrl(url)
-      setEmbedKey((k) => k + 1)
-      loadedPosRef.current = targetServerPos
-      loadedAtMsRef.current = now
+    const isBeforeSchedule = room.scheduledStartTime && new Date(room.scheduledStartTime).getTime() > Date.now()
+    if (isBeforeSchedule) return
+
+    const roomProvider = (room.provider === 'cinesrc' ? 'cinesrc' : 'vidcore') as ServerProvider
+    const targetPos = Math.max(0, room.currentTime - 5)
+
+    // Play/pause sync
+    if (room.isPlaying !== lastSyncedPlayingRef.current) {
+      sendPlayerCommand(iframeRef.current, roomProvider, room.isPlaying ? 'play' : 'pause')
       lastSyncedPlayingRef.current = room.isPlaying
     }
-  }, [room?.currentTime, room?.isPlaying, room?.mediaType, room?.tmdbId, room?.scheduledStartTime, isHost]) // eslint-disable-line
+
+    // Drift correction via seek
+    const now = Date.now()
+    let estimatedPos = loadedPosRef.current
+    if (lastSyncedPlayingRef.current && loadedAtMsRef.current > 0) {
+      estimatedPos += (now - loadedAtMsRef.current) / 1000
+    }
+
+    const drift = Math.abs(targetPos - estimatedPos)
+    if (drift > 10) {
+      sendPlayerCommand(iframeRef.current, roomProvider, 'seek', targetPos)
+      loadedPosRef.current = targetPos
+      loadedAtMsRef.current = now
+    }
+  }, [room?.currentTime, room?.isPlaying, room?.scheduledStartTime, room?.provider, isHost, embedUrl])
+
+  // ── Host: listen to iframe events and sync actual playback to server ─────
+  useEffect(() => {
+    if (!isHost || !embedUrl) return
+
+    const onMessage = (event: MessageEvent) => {
+      if (
+        iframeRef.current?.contentWindow &&
+        event.source &&
+        event.source !== iframeRef.current.contentWindow
+      ) {
+        return
+      }
+
+      const playerEvent = normalizePlayerEvent(event.data, provider)
+      if (!playerEvent) return
+
+      if (typeof playerEvent.currentTime === 'number') {
+        hostCurrentTimeRef.current = playerEvent.currentTime
+      }
+
+      // Sync play/pause/seek state changes to server
+      if (playerEvent.event === 'play' || playerEvent.event === 'pause' || playerEvent.event === 'seeked') {
+        const playing = playerEvent.event === 'play'
+        hostSyncRef.current(playing, hostCurrentTimeRef.current)
+      }
+    }
+
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [isHost, embedUrl, provider])
+
+  // ── Host: periodic time sync to correct drift ─────────────────────────────
+  useEffect(() => {
+    if (!isHost || !embedUrl) return
+
+    const interval = setInterval(() => {
+      if (hostCurrentTimeRef.current > 0) {
+        hostSyncRef.current(true, hostCurrentTimeRef.current)
+      }
+    }, 15000)
+
+    return () => clearInterval(interval)
+  }, [isHost, embedUrl])
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -226,25 +323,6 @@ export default function WatchPartyPage({
   }
 
   // ── Host Controls ──────────────────────────────────────────────────────────
-  const hostSync = async (isPlaying: boolean, currentTime?: number) => {
-    if (hostAction) return
-    setHostAction(true)
-    try {
-      await fetch('/api/watch-party', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: resolvedParams.code,
-          action: 'sync',
-          isPlaying,
-          ...(currentTime !== undefined ? { currentTime } : {}),
-        }),
-      })
-      await fetchRoom()
-    } catch { toast.error('Sync failed') }
-    finally { setHostAction(false) }
-  }
-
   const startPartyNow = async () => {
     if (hostAction) return
     setHostAction(true)
@@ -275,6 +353,22 @@ export default function WatchPartyPage({
       toast.success(`Scheduled to start in ${minutes} minutes`)
     } catch { toast.error('Failed to set schedule') }
     finally { setHostAction(false) }
+  }
+
+  const changeProvider = async (newProvider: ServerProvider) => {
+    setProvider(newProvider)
+    if (!isHost) return
+    playSound.click()
+    try {
+      await fetch('/api/watch-party', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: resolvedParams.code, action: 'setProvider', provider: newProvider }),
+      })
+      await fetchRoom()
+    } catch {
+      toast.error('Failed to change server')
+    }
   }
 
   const toggleChatMute = async () => {
@@ -464,6 +558,9 @@ export default function WatchPartyPage({
                 <SkipForward className="h-3.5 w-3.5" /> Restart
               </button>
 
+              {/* Server Provider Selector */}
+              <ServerSelector provider={provider} onChange={changeProvider} />
+
               {/* Set Schedule Dropdown */}
               <div className="relative inline-flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-purple-400" />
@@ -558,6 +655,7 @@ export default function WatchPartyPage({
                   ) : embedUrl ? (
                     <iframe
                       key={embedKey}
+                      ref={iframeRef}
                       src={embedUrl}
                       className="h-full w-full"
                       allowFullScreen

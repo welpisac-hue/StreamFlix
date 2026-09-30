@@ -143,7 +143,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { tmdbId, title, mediaType, seasonNumber, episodeNumber, maxUsers, scheduledInMinutes } = body
+    const { tmdbId, title, mediaType, seasonNumber, episodeNumber, maxUsers, scheduledInMinutes, provider } = body
 
     const parsedTmdbId = parseInt(String(tmdbId), 10)
     if (!Number.isFinite(parsedTmdbId) || parsedTmdbId <= 0 || !title || !mediaType) {
@@ -174,6 +174,7 @@ export async function POST(request: Request) {
         maxUsers: maxUsers ? Math.max(2, Math.min(500, parseInt(String(maxUsers), 10))) : 50,
         isPlaying: !scheduledStartTime,
         scheduledStartTime,
+        provider: provider === 'cinesrc' ? 'cinesrc' : 'vidcore',
       },
     })
 
@@ -272,6 +273,16 @@ export async function PATCH(request: Request) {
           isPlaying: true,
           currentTime: 0,
         },
+      })
+      return NextResponse.json({ ok: true, room: updated })
+    }
+
+    // Host changes the embed server provider
+    if (action === 'setProvider') {
+      const newProvider = body.provider === 'cinesrc' ? 'cinesrc' : 'vidcore'
+      const updated = await prisma.watchPartyRoom.update({
+        where: { id: room.id },
+        data: { provider: newProvider },
       })
       return NextResponse.json({ ok: true, room: updated })
     }

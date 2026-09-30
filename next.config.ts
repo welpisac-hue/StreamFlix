@@ -26,7 +26,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https://image.tmdb.org https://*.tmdb.org https://s4.anilist.co https://*.anilist.co https://cdn.myanimelist.net https://*.myanimelist.net https://rickandmortyapi.com https://static.wikia.nocookie.net",
       "font-src 'self' data:",
       "connect-src 'self' https://api.themoviedb.org https://graphql.anilist.co https://api.jikan.moe https://arm.haglund.dev https://rickandmortyapi.com https://api.disneyapi.dev",
-      "frame-src 'self' https://www.vidking.net https://vidking.net https://tryembed.us.cc https://www.youtube.com https://www.youtube-nocookie.com",
+      "frame-src 'self' https://vidcore.io https://cinesrc.st https://tryembed.us.cc https://www.youtube.com https://www.youtube-nocookie.com",
       "media-src 'self' blob: https:",
       "object-src 'none'",
       "base-uri 'self'",
